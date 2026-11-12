@@ -45,6 +45,27 @@ class ShiftRuleView(ShiftRuleCreate):
     resource_id: UUID
 
 
+class ClosureCreate(BaseModel):
+    local_date: date
+    time_zone: str = Field(min_length=1, max_length=80)
+    label: str = Field(min_length=1, max_length=180)
+
+    @field_validator("time_zone")
+    @classmethod
+    def valid_zone(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError, KeyError) as exc:
+            raise ValueError("Use a valid IANA timezone name") from exc
+        return value
+
+
+class ClosureView(ClosureCreate):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    enterprise_id: UUID
+
+
 class AbsenceCreate(BaseModel):
     starts_at: AwareDatetime
     ends_at: AwareDatetime
@@ -105,6 +126,7 @@ class CalendarView(BaseModel):
     shift_rules: list[ShiftRuleView]
     absences: list[AbsenceView]
     reservations: list[ReservationView]
+    closures: list[ClosureView]
 
 
 class AuditView(BaseModel):
