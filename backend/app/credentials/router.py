@@ -240,13 +240,22 @@ def review_record(
     record = db.get(PersonCredential, record_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Credential not found")
+    # Serialize with personnel transfers and re-check current scope after locking.
+    lock_enterprise(db, record.enterprise_id)
+    db.refresh(record, with_for_update=True)
     person = db.get(Person, record.person_id)
-    if person is None or person.archived_at is not None:
+    if person is None:
+        raise HTTPException(status_code=409, detail="Person no longer exists")
+    db.refresh(person)
+    if person.archived_at is not None:
         raise HTTPException(status_code=409, detail="Person is archived")
     resource = db.scalar(
         select(WorkforceResource).where(WorkforceResource.person_id == person.id)
     )
-    if resource is None or not resource.is_active:
+    if resource is None:
+        raise HTTPException(status_code=409, detail="Resource no longer exists")
+    db.refresh(resource)
+    if not resource.is_active:
         raise HTTPException(status_code=409, detail="Resource is inactive")
     require_visible_person(db, reviewer, person)
     if record.submitted_by == reviewer.id:
@@ -257,8 +266,6 @@ def review_record(
     )
     if linked == person.id:
         raise HTTPException(status_code=403, detail="Own credential cannot be approved")
-    lock_enterprise(db, record.enterprise_id)
-    db.refresh(record, with_for_update=True)
     if record.status != "pending":
         raise HTTPException(status_code=409, detail="Credential has already been reviewed")
     if payload.decision == "verified":
