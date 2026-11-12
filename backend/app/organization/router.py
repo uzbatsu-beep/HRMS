@@ -286,6 +286,12 @@ def update_unit(
 ) -> OrganizationUnit:
     unit = unit_or_404(db, unit_id)
     lock_enterprise(db, unit.enterprise_id)
+    db.refresh(unit)  # Re-read the current parent after acquiring the enterprise lock.
+    previous = {
+        "name": unit.name,
+        "type_id": str(unit.type_id),
+        "parent_id": str(unit.parent_id) if unit.parent_id else None,
+    }
     updates = payload.model_fields_set
     if not updates:
         raise HTTPException(status_code=422, detail="No changes provided")
@@ -303,7 +309,10 @@ def update_unit(
         unit.parent_id = payload.parent_id
     audit(
         db, admin, unit.enterprise_id, "unit.updated", unit.id,
-        {"changes": payload.model_dump(exclude_unset=True, mode="json")},
+        {
+            "before": previous,
+            "changes": payload.model_dump(exclude_unset=True, mode="json"),
+        },
     )
     commit_or_conflict(db)
     db.refresh(unit)
