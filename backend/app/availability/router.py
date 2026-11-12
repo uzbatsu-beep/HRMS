@@ -1,6 +1,6 @@
 """Scoped scheduling and calendar APIs with transactional reservation checks."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -17,7 +17,7 @@ from app.availability.schemas import (
     ShiftRuleCreate, ShiftRuleView, WorkloadSummary,
 )
 from app.availability.service import (
-    as_utc, audit, check_range, commit_safe, evaluate, flush_safe, intersects, lock_enterprise,
+    as_utc, audit, check_range, commit_safe, evaluate, flush_safe, lock_enterprise,
 )
 from app.competence.models import UserPersonLink
 from app.config import settings
