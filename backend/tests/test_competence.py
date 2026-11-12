@@ -14,7 +14,7 @@ from app.database import Base, get_db
 from app.main import app
 from app.identity.models import UserAccount
 from app.identity.security import hash_password
-from app.competence.models import PersonSkillAssessment, SkillEvidence, UserPersonLink
+from app.competence.models import SkillEvidence, UserPersonLink
 
 PASSWORD = "competence-test-password"
 
@@ -151,7 +151,9 @@ def evidence() -> list[dict]:
     }]
 
 
-def test_catalog_is_configurable_and_versions_immutable(context: tuple[TestClient, Session]) -> None:
+def test_catalog_is_configurable_and_versions_immutable(
+    context: tuple[TestClient, Session],
+) -> None:
     client, _ = context
     s = seed(client)
     nested = admin_post(
