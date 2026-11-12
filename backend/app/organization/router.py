@@ -3,7 +3,7 @@
 import json
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -312,7 +312,7 @@ def update_unit(
 
 @router.get("/scopes", response_model=list[ScopeView])
 def list_scopes(
-    user_id: UUID | None = Query(default=None),
+    user_id: UUID | None = None,
     _admin: UserAccount = Depends(require_admin),  # noqa: B008
     db: Session = Depends(get_db),  # noqa: B008
 ) -> list[UserUnitScope]:
@@ -384,7 +384,7 @@ def revoke_scope(
 
 @router.get("/audit", response_model=list[AuditEventView])
 def list_audit(
-    enterprise_id: UUID | None = Query(default=None),
+    enterprise_id: UUID | None = None,
     _admin: UserAccount = Depends(require_admin),  # noqa: B008
     db: Session = Depends(get_db),  # noqa: B008
 ) -> list[OrganizationAuditEvent]:
