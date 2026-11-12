@@ -88,9 +88,17 @@ export default function PersonnelPanel() {
   const selectedEnterprise = enterprises.find((e) => e.id === enterpriseId);
 
   useEffect(() => {
-    const onAuthChanged = () => setAuthRevision((old) => old + 1);
+    const onAuthChanged = () => {
+      setSession(null);
+      setAuthRevision((old) => old + 1);
+    };
+    const onOrgChanged = () => setRefresh((old) => old + 1);
     window.addEventListener("twm-auth-changed", onAuthChanged);
-    return () => window.removeEventListener("twm-auth-changed", onAuthChanged);
+    window.addEventListener("twm-org-changed", onOrgChanged);
+    return () => {
+      window.removeEventListener("twm-auth-changed", onAuthChanged);
+      window.removeEventListener("twm-org-changed", onOrgChanged);
+    };
   }, []);
 
   useEffect(() => {
