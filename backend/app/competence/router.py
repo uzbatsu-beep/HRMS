@@ -4,7 +4,7 @@ import json
 from datetime import date, datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import exists, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -23,7 +23,7 @@ from app.competence.models import (
 )
 from app.competence.schemas import (
     AssessmentCreate, AssessmentView, AuditView, CategoryCreate, CategoryView,
-    EvidenceView, LevelView, LinkCreate, LinkView, MatrixRow, ReviewCreate,
+    EvidenceView, LevelView, LinkCreate, LinkView, OwnLinkView, MatrixRow, ReviewCreate,
     ScaleCreate, ScaleView, SkillCreate, SkillView,
 )
 
@@ -77,7 +77,14 @@ def read_person(db: Session, person_id: UUID, user: UserAccount) -> Person:
     if person is None:
         raise HTTPException(status_code=404, detail="Person not found")
     if own_person_id(db, user) == person_id and person.archived_at is None:
-        return person
+        resource = db.scalar(
+            select(WorkforceResource.id).where(
+                WorkforceResource.person_id == person.id,
+                WorkforceResource.is_active.is_(True),
+            )
+        )
+        if resource is not None:
+            return person
     return require_visible_person(db, user, person)
 
 
@@ -304,12 +311,30 @@ def list_links(
     return list(db.scalars(select(UserPersonLink).order_by(UserPersonLink.user_id)).all())
 
 
-@router.get("/me/link", response_model=LinkView | None)
+@router.get("/me/link", response_model=OwnLinkView | None)
 def own_link(
     user: UserAccount = Depends(get_current_user),  # noqa: B008
     db: Session = Depends(get_db),  # noqa: B008
-) -> UserPersonLink | None:
-    return db.get(UserPersonLink, user.id)
+) -> OwnLinkView | None:
+    link = db.get(UserPersonLink, user.id)
+    if link is None:
+        return None
+    person = db.get(Person, link.person_id)
+    if person is None or person.archived_at is not None:
+        return None
+    resource = db.scalar(
+        select(WorkforceResource.id)
+        .where(WorkforceResource.person_id == person.id, WorkforceResource.is_active.is_(True))
+    )
+    if resource is None:
+        return None
+    enterprise = db.get(Enterprise, person.enterprise_id)
+    if enterprise is None:
+        return None
+    return OwnLinkView(
+        user_id=user.id, person_id=person.id, enterprise_id=person.enterprise_id,
+        enterprise_name=enterprise.name,
+    )
 
 
 @router.post(
@@ -452,6 +477,8 @@ def review_assessment(
     if record is None:
         raise HTTPException(status_code=404, detail="Assessment not found")
     person = db.get(Person, record.person_id)
+    if person is None or person.archived_at is not None:
+        raise HTTPException(status_code=404, detail="Person not found")
     require_visible_person(db, user, person)
     if own_person_id(db, user) == record.person_id:
         raise HTTPException(status_code=403, detail="Self-review is forbidden")
