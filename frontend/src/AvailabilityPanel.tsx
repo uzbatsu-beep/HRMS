@@ -96,7 +96,7 @@ export default function AvailabilityPanel() {
   const [shiftDay, setShiftDay] = useState(0);
   const [shiftStart, setShiftStart] = useState("08:00");
   const [shiftEnd, setShiftEnd] = useState("17:00");
-  const [shiftZone, setShiftZone] = useState("America/Toronto");
+  const [shiftZone, setShiftZone] = useState("UTC");
   const [shiftValidFrom, setShiftValidFrom] = useState(calendarDay());
   const [shiftValidTo, setShiftValidTo] = useState("");
   const [absenceCategory, setAbsenceCategory] = useState("leave");
@@ -107,7 +107,7 @@ export default function AvailabilityPanel() {
   const [reserveTo, setReserveTo] = useState(utcLater(2));
   const [reservationRef, setReservationRef] = useState("");
   const [closureDate, setClosureDate] = useState(calendarDay());
-  const [closureZone, setClosureZone] = useState("America/Toronto");
+  const [closureZone, setClosureZone] = useState("UTC");
   const [closureLabel, setClosureLabel] = useState("");
 
   const admin = session?.user.role === "admin";
