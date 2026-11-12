@@ -6,7 +6,7 @@ type Enterprise = { id: string; name: string; code: string };
 type Person = {
   id: string; first_name: string; last_name: string; employee_code: string;
 };
-type Link = { user_id: string; person_id: string };
+type Link = { user_id: string; person_id: string; enterprise_id?: string; enterprise_name?: string };
 type Category = { id: string; code: string; name: string; parent_id: string | null };
 type Level = { id: string; scale_id: string; ordinal: number; label: string; description: string | null };
 type DraftLevel = { ordinal: number; label: string; description: string };
@@ -147,9 +147,18 @@ export default function CompetencePanel() {
           api<Link | null>(`${apiBase}/me/link`),
         ]);
         if (!active) return;
-        setEnterprises(ents);
+        const list = [...ents];
+        if (link?.enterprise_id && !list.some((ent) => ent.id === link.enterprise_id)) {
+          list.push({
+            id: link.enterprise_id,
+            name: link.enterprise_name ?? "Моё предприятие",
+            code: "own",
+          });
+        }
+        setEnterprises(list);
         setOwnLink(link);
-        setEnterpriseId((old) => ents.find((item) => item.id === old)?.id ?? ents[0]?.id ?? "");
+        setEnterpriseId((old) =>
+          list.find((item) => item.id === old)?.id ?? list[0]?.id ?? "");
         if (session?.user.role === "admin") {
           const [u, l] = await Promise.all([
             api<User[]>("/api/v1/auth/users"),
@@ -302,7 +311,7 @@ export default function CompetencePanel() {
   function addAssessment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!session || !selectedPerson || !assessmentSkill || !assessmentLevel) return;
-    const type = assessmentMode === "self" ? "self" : "expert";
+    const type = isOwnPerson ? "self" : assessmentMode;
     void submit(async () => {
       await api(
         `${apiBase}/persons/${selectedPerson}/${type}-assessments`,
