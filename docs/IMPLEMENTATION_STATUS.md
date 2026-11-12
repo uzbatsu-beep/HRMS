@@ -92,3 +92,27 @@ inactive/archive lifecycle and advanced configuration. Not production-ready.
 Limitations: no position catalogue, fine-grained field PII permissions, production
 authentication safeguards, import/export or qualification/competence integration yet.
 Do not use synthetic-stage build for real HR records.
+
+
+## PR #7 — Competence Management (Phase 4 first vertical slice)
+
+Implemented:
+- Configurable enterprise-scoped hierarchical skill categories and unique
+  technical skill codes.
+- Published immutable SkillScale versions with 2–10 scale levels.
+- Multi-enterprise data boundaries and PostgreSQL composite foreign keys for
+  categories, scale versions, skill references and levels in assessments.
+- Explicit admin-created UserPersonLink so linked staff can self-assess without
+  impersonating another employee.
+- Pending self/expert assessments and 0–8 evidence metadata records per proposal.
+- Independent manager/admin approve/reject with justification; no self-approval
+  or review of a proposal submitted by the reviewer.
+- Verified competence matrix based solely on last approved, active Skill ratings.
+- Application-level current-unit RBAC scope filtering, evidence/review audit.
+- React configuration, submission, review and matrix UI.
+- Alembic `0005_competence`, API tests and ADR-0005.
+
+Still incomplete: secured evidence attachments, lifecycle/expiry of assessments,
+skill-scale migrations, advanced configurable field forms, delegated admin,
+personnel privacy controls and a genuine industrial safety permit subsystem.
+Development/test-only. Do not load real personnel or certificate data.
