@@ -9,6 +9,7 @@ import app.models  # noqa: F401 - register models in SQLAlchemy metadata.
 import app.identity.models  # noqa: F401 - register identity models in SQLAlchemy metadata.
 import app.organization.models  # noqa: F401 - register organization tables.
 import app.personnel.models  # noqa: F401 - register personnel models.
+import app.competence.models  # noqa: F401 - register competence tables.
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
