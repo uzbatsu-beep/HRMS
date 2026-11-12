@@ -62,6 +62,7 @@ export default function PersonnelPanel() {
   const [queryDraft, setQueryDraft] = useState("");
   const [query, setQuery] = useState("");
   const [unitFilter, setUnitFilter] = useState("");
+  const [includeArchived, setIncludeArchived] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -74,6 +75,9 @@ export default function PersonnelPanel() {
   const [initialUnit, setInitialUnit] = useState("");
   const [initialRole, setInitialRole] = useState("");
   const [startOn, setStartOn] = useState(today());
+  const [assignmentUnit, setAssignmentUnit] = useState("");
+  const [assignmentDate, setAssignmentDate] = useState(today());
+  const [assignmentTitle, setAssignmentTitle] = useState("");
   const [transferUnit, setTransferUnit] = useState("");
   const [transferDate, setTransferDate] = useState(today());
   const [transferTitle, setTransferTitle] = useState("");
@@ -156,6 +160,7 @@ export default function PersonnelPanel() {
     const params = new URLSearchParams({ limit: "100" });
     if (query.trim()) params.set("q", query.trim());
     if (unitFilter) params.set("unit_id", unitFilter);
+    if (session.user.role === "admin" && includeArchived) params.set("include_archived", "true");
     request<Person[]>(
       `/api/v1/personnel/enterprises/${enterpriseId}/persons?${params.toString()}`,
     )
@@ -167,7 +172,7 @@ export default function PersonnelPanel() {
         }
       });
     return () => { active = false; };
-  }, [session?.user.id, enterpriseId, query, unitFilter, refresh]);
+  }, [session?.user.id, enterpriseId, query, unitFilter, includeArchived, refresh]);
 
   useEffect(() => {
     if (!selectedId || !session) {
@@ -233,6 +238,42 @@ export default function PersonnelPanel() {
       setInitialUnit("");
       setInitialRole("");
     }, "Карточка специалиста создана.");
+  }
+
+  function assignPrimary(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!session || !detail || !assignmentUnit) return;
+    void perform(async () => {
+      await request(
+        `/api/v1/personnel/resources/${detail.resource_id}/assignments`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            unit_id: assignmentUnit,
+            effective_from: assignmentDate,
+            position_title: assignmentTitle || null,
+          }),
+        },
+        session.csrf_token,
+      );
+      setAssignmentUnit("");
+      setAssignmentTitle("");
+    }, "Основное назначение зарегистрировано.");
+  }
+
+  function closeTeam(item: Team) {
+    if (!session || !detail || item.effective_to || item.effective_from > today()) return;
+    if (!window.confirm("Завершить участие в этой бригаде сегодняшним числом?")) return;
+    void perform(async () => {
+      await request(
+        `/api/v1/personnel/teams/${item.id}/close`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ effective_to: today() }),
+        },
+        session.csrf_token,
+      );
+    }, "Членство завершено, история сохранена.");
   }
 
   function transfer(event: FormEvent<HTMLFormElement>) {
@@ -350,6 +391,16 @@ export default function PersonnelPanel() {
               <button className="people-button people-muted" type="submit">Найти</button>
             </form>
           </div>
+          {admin && (
+            <label className="people-archived-toggle">
+              <input
+                type="checkbox"
+                checked={includeArchived}
+                onChange={(event) => setIncludeArchived(event.target.checked)}
+              />
+              Включить архивные карточки
+            </label>
+          )}
           <div className="people-subtitle">
             <strong>{selectedEnterprise?.name ?? "Реестр специалистов"}</strong>
             <small>Показано не более 100 записей</small>
@@ -365,7 +416,7 @@ export default function PersonnelPanel() {
                 <span className="people-avatar">{person.last_name.charAt(0)}</span>
                 <span className="people-item-main">
                   <strong>{person.last_name} {person.first_name} {person.middle_name ?? ""}</strong>
-                  <small>{person.employee_code} · {person.current_unit_name ?? "Не назначен"} </small>
+                  <small>{person.employee_code} · {person.current_unit_name ?? "Не назначен"}{person.archived_at ? " · Архив" : ""}</small>
                 </span>
                 <span className="people-position">{person.position_title ?? "—"}</span>
               </button>
@@ -413,6 +464,13 @@ export default function PersonnelPanel() {
                   <div key={item.id}>
                     <strong>{unitNames.get(item.unit_id) ?? "Бригада"}</strong>
                     <span>{item.effective_from} → {item.effective_to ?? "н.в."}</span>
+                    {admin && !detail.archived_at && !item.effective_to &&
+                      item.effective_from <= today() && (
+                      <button type="button" className="people-button people-muted"
+                        onClick={() => closeTeam(item)} disabled={busy}>
+                        Завершить
+                      </button>
+                    )}
                   </div>
                 ))}
                 {detail.team_memberships.length === 0 && (
@@ -440,7 +498,33 @@ export default function PersonnelPanel() {
                       Сохранить данные
                     </button>
                   </form>
-                  <form onSubmit={transfer} className="people-form">
+                  {!detail.current_unit_id && (
+                    <form onSubmit={assignPrimary} className="people-form">
+                      <h4>Назначить основное подразделение</h4>
+                      <label>Подразделение
+                        <select required value={assignmentUnit}
+                          onChange={(event) => setAssignmentUnit(event.target.value)}>
+                          <option value="">Выберите</option>
+                          {units.map((unit) => (
+                            <option key={unit.id} value={unit.id}>{unit.name}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>Дата назначения
+                        <input type="date" required value={assignmentDate}
+                          onChange={(event) => setAssignmentDate(event.target.value)} />
+                      </label>
+                      <label>Должность
+                        <input maxLength={160} value={assignmentTitle}
+                          onChange={(event) => setAssignmentTitle(event.target.value)} />
+                      </label>
+                      <button className="people-button" type="submit" disabled={busy}>
+                        Зарегистрировать назначение
+                      </button>
+                    </form>
+                  )}
+                  {detail.current_unit_id && (
+                    <form onSubmit={transfer} className="people-form">
                     <h4>Перевод в подразделение</h4>
                     <label>Новое подразделение
                       <select required value={transferUnit}
@@ -463,7 +547,8 @@ export default function PersonnelPanel() {
                     <button className="people-button" type="submit" disabled={busy}>
                       Зарегистрировать перевод
                     </button>
-                  </form>
+                    </form>
+                  )}
                   <form onSubmit={addTeam} className="people-form">
                     <h4>Дополнительная бригада</h4>
                     <label>Бригада / подразделение
