@@ -67,7 +67,9 @@ def upgrade() -> None:
             ["organization_units.enterprise_id", "organization_units.id"],
             name="fk_org_unit_parent_same_enterprise",
         ),
-        sa.CheckConstraint("parent_id IS NULL OR parent_id <> id", name="ck_org_unit_not_own_parent"),
+        sa.CheckConstraint(
+            "parent_id IS NULL OR parent_id <> id", name="ck_org_unit_not_own_parent"
+        ),
     )
     op.create_table(
         "user_unit_scopes",
