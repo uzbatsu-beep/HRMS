@@ -467,3 +467,98 @@ def test_link_conflicts_and_unauthorized_linking(
         headers=auth(client, "skill-admin"),
         json={"person_id": s["person"], "user_id": s["manager_user"]},
     ).status_code == 409
+
+
+def test_linked_self_service_without_organization_grant(
+    context: tuple[TestClient, Session],
+) -> None:
+    client, _ = context
+    s = seed(client)
+    admin_post(
+        client, "/api/v1/competence/links",
+        {"user_id": s["viewer_user"], "person_id": s["person"]},
+    )
+    csrf = auth(client, "skill-viewer")
+    own = client.get("/api/v1/competence/me/link")
+    assert own.status_code == 200
+    assert own.json()["person_id"] == s["person"]
+    assert own.json()["enterprise_id"] == s["enterprise"]
+    assert own.json()["enterprise_name"] == "Factory"
+    assert client.get(
+        f"/api/v1/competence/enterprises/{s['enterprise']}/skills"
+    ).status_code == 200
+    assert client.get(
+        f"/api/v1/personnel/persons/{s['person']}"
+    ).status_code == 404  # No personnel-wide scope is implied.
+    new = client.post(
+        f"/api/v1/competence/persons/{s['person']}/self-assessments",
+        headers=csrf,
+        json={"skill_id": s["skill"], "level_id": s["level"], "evidence": evidence()},
+    )
+    assert new.status_code == 201, new.text
+    result = client.get(
+        f"/api/v1/competence/persons/{s['person']}/assessments"
+    )
+    assert result.status_code == 200
+    assert len(result.json()) == 1
+    assert client.get(
+        f"/api/v1/competence/persons/{s['other_person']}/assessments"
+    ).status_code == 404
+
+
+def test_existing_level_from_another_scale_is_rejected(
+    context: tuple[TestClient, Session],
+) -> None:
+    client, _ = context
+    s = seed(client)
+    second = admin_post(
+        client, f"/api/v1/competence/enterprises/{s['enterprise']}/scales",
+        {"code": "tech", "name": "Different scale version", "version": 2,
+         "levels": [
+             {"ordinal": 0, "label": "Beginner"},
+             {"ordinal": 1, "label": "Advanced"},
+         ]},
+    )
+    result = client.post(
+        f"/api/v1/competence/persons/{s['person']}/expert-assessments",
+        headers=auth(client, "skill-manager"),
+        json={
+            "skill_id": s["skill"],
+            "level_id": second["levels"][1]["id"],
+            "evidence": evidence(),
+        },
+    )
+    assert result.status_code == 422
+
+
+def test_no_one_can_review_assessment_of_linked_self(
+    context: tuple[TestClient, Session],
+) -> None:
+    client, _ = context
+    s = seed(client)
+    admin_user = next(
+        user for user in client.get("/api/v1/auth/users").json()
+        if user["username"] == "skill-admin"
+    )
+    admin_post(
+        client, "/api/v1/competence/links",
+        {"user_id": admin_user["id"], "person_id": s["person"]},
+    )
+    assessment = client.post(
+        f"/api/v1/competence/persons/{s['person']}/expert-assessments",
+        headers=auth(client, "skill-manager"),
+        json={"skill_id": s["skill"], "level_id": s["level"], "evidence": evidence()},
+    )
+    assert assessment.status_code == 201, assessment.text
+    prohibited = client.post(
+        f"/api/v1/competence/assessments/{assessment.json()['id']}/review",
+        headers=auth(client, "skill-admin"),
+        json={"decision": "approved", "note": "Should not review own competence."},
+    )
+    assert prohibited.status_code == 403
+    approved = client.post(
+        f"/api/v1/competence/assessments/{assessment.json()['id']}/review",
+        headers=auth(client, "skill-manager2"),
+        json={"decision": "approved", "note": "Verified evidence independently."},
+    )
+    assert approved.status_code == 200
