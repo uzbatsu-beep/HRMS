@@ -86,7 +86,6 @@ export default function CompetencePanel() {
   const [linkUser, setLinkUser] = useState("");
   const [linkPerson, setLinkPerson] = useState("");
 
-  const [assessmentMode, setAssessmentMode] = useState<"self" | "expert">("expert");
   const [assessmentSkill, setAssessmentSkill] = useState("");
   const [assessmentLevel, setAssessmentLevel] = useState("");
   const [evidenceKind, setEvidenceKind] = useState("observation");
@@ -311,7 +310,7 @@ export default function CompetencePanel() {
   function addAssessment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!session || !selectedPerson || !assessmentSkill || !assessmentLevel) return;
-    const type = isOwnPerson ? "self" : assessmentMode;
+    const type = isOwnPerson ? "self" : "expert";
     void submit(async () => {
       await api(
         `${apiBase}/persons/${selectedPerson}/${type}-assessments`,
@@ -572,12 +571,8 @@ export default function CompetencePanel() {
               {selectedPerson && (mayReview || isOwnPerson) && (
                 <form className="skill-form skill-assess-form" onSubmit={addAssessment}>
                   <h4>Новая оценка (статус «На проверке»)</h4>
-                  <label>Источник оценки
-                    <select value={isOwnPerson ? "self" : assessmentMode}
-                      onChange={(e) => setAssessmentMode(e.target.value as "self" | "expert")}>
-                      {isOwnPerson && <option value="self">Самооценка</option>}
-                      {mayReview && !isOwnPerson && <option value="expert">Экспертная оценка</option>}
-                    </select>
+<label>Источник оценки
+                    <input readOnly value={isOwnPerson ? "Самооценка" : "Экспертная оценка"} />
                   </label>
                   <label>Навык
                     <select required value={assessmentSkill}
