@@ -77,6 +77,8 @@ class LinkCreate(BaseModel):
 
 
 class LinkView(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     user_id: UUID
     person_id: UUID
 
