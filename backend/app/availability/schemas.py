@@ -43,6 +43,7 @@ class ShiftRuleView(ShiftRuleCreate):
     id: UUID
     enterprise_id: UUID
     resource_id: UUID
+    disabled_at: datetime | None
 
 
 class ClosureCreate(BaseModel):
@@ -127,6 +128,15 @@ class CalendarView(BaseModel):
     absences: list[AbsenceView]
     reservations: list[ReservationView]
     closures: list[ClosureView]
+
+
+class WorkloadSummary(BaseModel):
+    resource_id: UUID
+    starts_at: datetime
+    ends_at: datetime
+    reserved_minutes: int
+    absence_minutes: int
+    active_reservations: int
 
 
 class AuditView(BaseModel):
