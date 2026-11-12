@@ -83,6 +83,11 @@ class LinkView(BaseModel):
     person_id: UUID
 
 
+class OwnLinkView(LinkView):
+    enterprise_id: UUID
+    enterprise_name: str
+
+
 class EvidenceCreate(BaseModel):
     kind: EvidenceKind
     description: str = Field(min_length=10, max_length=1500)
