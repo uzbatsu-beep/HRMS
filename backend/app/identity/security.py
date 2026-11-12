@@ -73,7 +73,9 @@ def require_admin(
     user: UserAccount = Depends(get_current_user),  # noqa: B008
 ) -> UserAccount:
     if user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions"
+        )
     return user
 
 
