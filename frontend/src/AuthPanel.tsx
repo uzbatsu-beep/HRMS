@@ -38,6 +38,7 @@ export default function AuthPanel() {
         setUser(data.user);
         setCsrf(data.csrf_token);
         setStatus("signed_in");
+      window.dispatchEvent(new Event("twm-auth-changed"));
       })
       .catch((reason: unknown) => {
         if (reason instanceof Error && reason.name === "AbortError") return;
@@ -85,6 +86,7 @@ export default function AuthPanel() {
       setCsrf("");
       setCreateMessage("");
       setStatus("signed_out");
+      window.dispatchEvent(new Event("twm-auth-changed"));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Ошибка выхода.");
       setStatus("signed_in");
@@ -114,6 +116,7 @@ export default function AuthPanel() {
       }
       const created = (await response.json()) as User;
       setCreateMessage(`Пользователь ${created.username} создан.`);
+      window.dispatchEvent(new Event("twm-auth-changed"));
       setNewUsername("");
       setNewPassword("");
       setNewRole("viewer");
@@ -211,7 +214,7 @@ export default function AuthPanel() {
       {error && <p className="auth-error" role="alert">{error}</p>}
       <p className="auth-footnote">
         Ролевая проверка действует на сервере. Организационные области доступа
-        и доменные операции подключаются на следующих этапах.
+        настраиваются администратором в разделе ниже; доменные операции появятся позже.
       </p>
     </section>
   );
