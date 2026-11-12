@@ -31,6 +31,7 @@ def upgrade() -> None:
         sa.Column("time_zone", sa.String(80), nullable=False),
         sa.Column("valid_from", sa.Date(), nullable=False),
         sa.Column("valid_to", sa.Date()),
+        sa.Column("disabled_at", sa.DateTime(timezone=True)),
         sa.ForeignKeyConstraint(
             ["enterprise_id", "resource_id"],
             ["workforce_resources.enterprise_id", "workforce_resources.id"],
