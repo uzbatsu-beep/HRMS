@@ -264,3 +264,100 @@ h2 { margin: 6px 0 0; font-size: 18px; letter-spacing: -.025em; }
   margin: 0 0 16px; color: var(--muted); font-size: 11px; cursor: pointer; }
 .people-panel .people-archived-toggle input { width: 16px; height: 16px; min-height: 0;
   accent-color: var(--accent); }
+
+
+/* PR #7 — Competence Management: calm enterprise configuration surfaces */
+.skill-panel { margin: 0 0 18px; padding: 23px 25px; border: 1px solid var(--line);
+  border-radius: 14px; background: var(--panel); }
+.skill-panel h3 { font-size: 14px; margin: 18px 0 12px; }
+.skill-panel h4 { font-size: 12px; margin: 0 0 5px; }
+.skill-lead { margin: -3px 0 16px; font-size: 12px; color: var(--muted); line-height: 1.7; }
+.skill-kpi { background: var(--accent-soft); color: var(--accent); border-radius: 7px;
+  padding: 7px 10px; font-size: 10px; font-weight: 700; }
+.skill-panel label { display: grid; gap: 7px; min-width: 0; font-size: 11px; font-weight: 650; }
+.skill-panel input, .skill-panel select, .skill-panel textarea {
+  min-width: 0; width: 100%; padding: 9px 11px; min-height: 39px;
+  background: #fff; color: var(--ink); font: inherit; font-size: 12px;
+  border: 1px solid var(--line); border-radius: 7px; }
+.skill-panel textarea { resize: vertical; min-height: 74px; }
+.skill-panel :is(input, select, textarea, button):focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px; }
+.skill-select-enterprise { max-width: 390px; margin-bottom: 19px; }
+.skill-button { min-height: 38px; padding: 8px 13px; background: var(--accent);
+  color: #fff; border: 1px solid var(--accent); border-radius: 7px; cursor: pointer;
+  font-size: 11px; font-weight: 750; }
+.skill-button:disabled { cursor: not-allowed; opacity: .55; }
+.skill-secondary { color: var(--accent); background: #fff; border-color: #c8dbd5; }
+.skill-overview { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 8px; }
+.skill-overview article { background: #f4f9f6; border: 1px solid #e0ebe4; padding: 13px;
+  display: grid; gap: 7px; border-radius: 9px; }
+.skill-overview strong { font-size: 22px; letter-spacing: -.04em; color: var(--ink); }
+.skill-overview span { font-size: 10px; color: var(--muted); line-height: 1.5; }
+.skill-two-column { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 18px; }
+.skill-collection, .skill-assessment-list { display: grid; gap: 7px; }
+.skill-catalog-item { padding: 12px; border: 1px solid var(--line); border-radius: 8px;
+  background: #fff; display: grid; gap: 5px; }
+.skill-catalog-item strong { font-size: 12px; }
+.skill-catalog-item small { font-size: 10px; color: var(--muted);
+  overflow-wrap: anywhere; line-height: 1.7; }
+.skill-empty { padding: 13px; border-radius: 7px; background: #f6faf8;
+  color: var(--muted); font-size: 11px; line-height: 1.7; }
+.skill-config { padding: 14px 17px; margin-top: 19px; background: #fafcfb;
+  border: 1px solid var(--line); border-radius: 10px; }
+.skill-config details { border: 1px solid var(--line); border-radius: 8px;
+  padding: 12px; background: #fff; margin-bottom: 8px; }
+.skill-config summary { font-size: 12px; font-weight: 750; cursor: pointer; }
+.skill-form { margin-top: 14px; display: grid; grid-template-columns: repeat(2,minmax(0,1fr));
+  align-items: end; gap: 11px; }
+.skill-form .skill-button { justify-self: start; }
+.skill-levels { grid-column: 1 / -1; display: grid; gap: 9px; border-top: 1px solid var(--line);
+  padding-top: 10px; }
+.skill-level-edit { display: grid; grid-template-columns: 90px 1fr 1.5fr auto; gap: 8px;
+  align-items: end; }
+.skill-level-edit .skill-button { min-width: 68px; }
+.skill-hint { grid-column: 1 / -1; margin: 0; font-size: 11px;
+  line-height: 1.6; color: var(--muted); }
+.skill-assessment-section, .skill-matrix { margin-top: 22px; padding-top: 4px;
+  border-top: 1px solid var(--line); }
+.skill-assess-form { padding: 14px; margin: 14px 0; border: 1px solid #d9e9e0;
+  border-radius: 10px; background: #fafdfb; }
+.skill-assess-form h4, .skill-wide { grid-column: 1 / -1; }
+.skill-assessment { border: 1px solid var(--line); border-radius: 9px; padding: 13px;
+  background: #fff; }
+.skill-assessment-heading { display: flex; justify-content: space-between;
+  align-items: center; gap: 10px; }
+.skill-assessment-heading strong { font-size: 12px; }
+.skill-assessment p { font-size: 11px; margin: 7px 0 0; color: var(--muted); line-height: 1.6; }
+.skill-assessment p strong { color: var(--ink); }
+.skill-state { font-size: 10px; border-radius: 7px; padding: 6px 8px; white-space: nowrap; }
+.skill-state-pending { color: #805e0b; background: #fdf6db; }
+.skill-state-approved { color: #176c4c; background: #e8f8ec; }
+.skill-state-rejected { color: #a03838; background: #ffefed; }
+.skill-evidence { color: #54756a !important; }
+.skill-review { margin-top: 12px; border-top: 1px solid var(--line);
+  padding-top: 12px; display: grid; gap: 8px;
+  grid-template-columns: minmax(0,1fr) auto auto; align-items: end; }
+.skill-table-wrap { width: 100%; overflow-x: auto; }
+.skill-table-wrap table { width: 100%; border-collapse: collapse;
+  font-size: 11px; min-width: 600px; }
+.skill-table-wrap th { background: #f1f7f3; font-size: 10px; color: #51675c;
+  font-weight: 750; text-align: left; padding: 11px; }
+.skill-table-wrap td { padding: 11px; border-bottom: 1px solid var(--line); }
+.skill-table-wrap td small { display: block; color: var(--muted); margin-top: 3px; }
+.skill-error { font-size: 11px; color: #ab353b; margin-top: 12px; }
+.skill-notice { font-size: 11px; color: var(--accent); margin-top: 12px; }
+@media (max-width: 800px) {
+  .skill-overview { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .skill-level-edit { grid-template-columns: 80px 1fr 1fr; }
+  .skill-level-edit button { grid-column: 1 / -1; justify-self: start; }
+  .skill-review { grid-template-columns: 1fr 1fr; }
+  .skill-review label { grid-column: 1 / -1; }
+}
+@media (max-width: 520px) {
+  .skill-panel { padding: 16px 14px; }
+  .skill-overview, .skill-two-column, .skill-form { grid-template-columns: 1fr; }
+  .skill-level-edit { grid-template-columns: 70px 1fr; }
+  .skill-level-edit label:nth-child(3) { grid-column: 1 / -1; }
+  .skill-level-edit button { grid-column: 1 / -1; }
+  .skill-assessment-heading { flex-wrap: wrap; }
+}
