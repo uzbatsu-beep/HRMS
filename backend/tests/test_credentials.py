@@ -428,3 +428,28 @@ def test_unverified_and_rejected_records_do_not_grant_work(
     assert client.get(
         f"/api/v1/credentials/enterprises/{s['enterprise']}/requirements"
     ).status_code == 200
+
+
+def test_review_and_revocation_reasons_must_not_be_whitespace(
+    scenario: tuple[TestClient, Session],
+) -> None:
+    client, _ = scenario
+    s = seed(client)
+    record = document(client, s)
+    blank_review = client.post(
+        f"/api/v1/credentials/records/{record['id']}/review",
+        headers=auth(client, "cred-admin2"),
+        json={"decision": "verified", "note": "                 "},
+    )
+    assert blank_review.status_code == 422
+    approved = review(client, record["id"])
+    assert approved["status"] == "verified"
+    blank_revoke = client.post(
+        f"/api/v1/credentials/records/{record['id']}/revoke",
+        headers=auth(client),
+        json={"reason": "                 "},
+    )
+    assert blank_revoke.status_code == 422
+    assert client.get(
+        f"/api/v1/credentials/persons/{s['person']}"
+    ).json()[0]["status"] == "verified"
