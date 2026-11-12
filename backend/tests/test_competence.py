@@ -32,7 +32,13 @@ def context() -> Generator[tuple[TestClient, Session], None, None]:
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.close()
 
-    Base.metadata.create_all(engine)
+    # The existing platform_settings table uses PostgreSQL JSONB syntax.
+    # Other domain tables are dialect-compatible for these isolated SQLite API tests.
+    tables = [
+        table for table in Base.metadata.sorted_tables
+        if table.name != "platform_settings"
+    ]
+    Base.metadata.create_all(engine, tables=tables)
     db = Session(engine, expire_on_commit=False)
     for name, role in (
         ("skill-admin", "admin"), ("skill-manager", "manager"),
