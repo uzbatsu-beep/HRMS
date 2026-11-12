@@ -6,10 +6,11 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
+from app.identity.router import router as identity_router
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.1.0",
+    version="0.2.0",
     description="API foundation for Technical Workforce Management.",
     docs_url="/docs",
     redoc_url="/redoc",
@@ -20,8 +21,9 @@ app.add_middleware(
     allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID", "X-CSRF-Token"],
 )
+app.include_router(identity_router)
 
 
 @app.get("/", tags=["system"], summary="API information")

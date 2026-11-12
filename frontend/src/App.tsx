@@ -1,5 +1,6 @@
 
 import { useEffect, useState } from "react";
+import AuthPanel from "./AuthPanel";
 
 type ReadinessResponse = {
   status: string;
@@ -77,6 +78,8 @@ export default function App() {
           <span>Это базовая версия приложения. Функциональные доменные модули будут подключаться последовательно.</span>
         </div>
       </section>
+
+      <AuthPanel />
 
       <section className="system-panel" aria-labelledby="system-title">
         <div className="section-heading">
