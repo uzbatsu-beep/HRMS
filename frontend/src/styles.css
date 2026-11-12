@@ -107,3 +107,65 @@ h2 { margin: 6px 0 0; font-size: 18px; letter-spacing: -.025em; }
   .auth-form { grid-template-columns: 1fr; }
   .auth-current { flex-wrap: wrap; }
 }
+
+
+/* PR #5 — Organization Management */
+.org-panel { margin: 0 0 18px; padding: 22px 24px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
+.org-intro { color: var(--muted); font-size: 12px; line-height: 1.7; margin-top: -4px; }
+.org-toolbar { display: flex; align-items: end; gap: 12px; margin: 22px 0 12px; }
+.org-field { flex: 1; min-width: 0; }
+.org-panel label { display: grid; gap: 6px; font-size: 11px; font-weight: 650; }
+.org-panel input:not([type="checkbox"]), .org-panel select {
+  width: 100%; min-height: 38px; border: 1px solid var(--line); border-radius: 7px;
+  padding: 8px 10px; background: #fff; color: var(--ink); font: inherit; font-size: 12px;
+}
+.org-panel input:focus-visible, .org-panel select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.org-button { min-height: 36px; padding: 7px 12px; border: 1px solid var(--accent); border-radius: 7px;
+  background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; cursor: pointer; }
+.org-button:disabled { opacity: .6; cursor: not-allowed; }
+.org-button-muted { background: #fff; color: var(--accent); border-color: #cbdcd5; }
+.org-details { margin-top: 12px; padding: 11px 14px; border: 1px solid var(--line);
+  border-radius: 9px; background: #f9fbfa; }
+.org-details summary { font-size: 12px; font-weight: 700; cursor: pointer; }
+.org-form { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)) auto; gap: 12px;
+  align-items: end; padding: 12px 0 4px; }
+.org-section-title { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin: 22px 0 10px; border-bottom: 1px solid var(--line); padding-bottom: 9px; }
+.org-section-title h3 { font-size: 14px; margin: 0; }
+.org-section-title span { font-size: 10px; color: var(--muted); }
+.org-count { font-size: 10px; color: var(--accent); background: var(--accent-soft);
+  padding: 6px 9px; border-radius: 6px; white-space: nowrap; }
+.org-tree { display: grid; gap: 5px; }
+.org-tree-row { display: flex; align-items: center; gap: 10px; padding: 9px 11px 9px 14px;
+  border: 1px solid var(--line); border-radius: 8px; min-width: 0; }
+.org-tree-label { flex: 1; min-width: 0; }
+.org-tree-label strong { display: block; font-size: 12px; overflow-wrap: anywhere; }
+.org-tree-label small { display: block; font-size: 10px; color: var(--muted); margin-top: 3px; }
+.org-branch { color: #76a395; font-size: 16px; flex-shrink: 0; }
+.org-tree-row .org-button { min-height: 29px; padding: 4px 8px; }
+.org-notice, .org-hint { color: var(--muted); font-size: 11px; line-height: 1.7; }
+.org-notice { padding: 12px; background: #f5f8f6; border-radius: 7px; }
+.org-checkbox { display: flex !important; align-items: center; gap: 8px; min-height: 36px; }
+.org-checkbox input { width: 16px; height: 16px; accent-color: var(--accent); }
+.org-edit { padding: 14px; margin-top: 14px; border: 1px solid #c4ddd3; border-radius: 10px; }
+.org-edit h4 { margin: 0; font-size: 13px; }
+.org-scopes { margin: 14px 0; display: grid; gap: 6px; }
+.org-scope-row { display: flex; justify-content: space-between; align-items: center; gap: 15px;
+  padding: 8px 11px; background: #f8faf9; border: 1px solid var(--line); border-radius: 8px;
+  font-size: 11px; }
+.org-log { margin-top: 12px; display: grid; gap: 8px; max-height: 200px; overflow-y: auto; }
+.org-log div { font-size: 10px; color: var(--muted); }
+.org-error { color: #aa353b; font-size: 12px; }
+.org-success { color: var(--accent); font-size: 12px; }
+@media (max-width: 760px) {
+  .org-form { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .org-form .org-button { grid-column: 1 / -1; }
+}
+@media (max-width: 460px) {
+  .org-panel { padding: 17px 14px; }
+  .org-form { grid-template-columns: 1fr; }
+  .org-toolbar { align-items: stretch; flex-direction: column; }
+  .org-toolbar .org-button { width: 100%; }
+  .org-section-title { align-items: flex-start; flex-direction: column; }
+  .org-tree-row { padding-right: 6px; }
+}
