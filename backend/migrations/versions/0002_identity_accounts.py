@@ -25,7 +25,10 @@ def upgrade() -> None:
         sa.Column("password_hash", sa.String(255), nullable=False),
         sa.Column("role", sa.String(16), nullable=False),
         sa.Column("is_active", sa.Boolean(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True),
+            server_default=sa.func.now(), nullable=False,
+        ),
         sa.CheckConstraint("role IN ('admin', 'manager', 'viewer')", name="ck_user_accounts_role"),
     )
     op.create_index("ix_user_accounts_username", "user_accounts", ["username"], unique=True)
