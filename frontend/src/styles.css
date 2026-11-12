@@ -258,3 +258,9 @@ h2 { margin: 6px 0 0; font-size: 18px; letter-spacing: -.025em; }
   .people-detail { padding: 13px; }
   .people-detail-header { flex-wrap: wrap; }
 }
+
+
+.people-archived-toggle { display: inline-flex !important; align-items: center; gap: 8px;
+  margin: 0 0 16px; color: var(--muted); font-size: 11px; cursor: pointer; }
+.people-panel .people-archived-toggle input { width: 16px; height: 16px; min-height: 0;
+  accent-color: var(--accent); }
