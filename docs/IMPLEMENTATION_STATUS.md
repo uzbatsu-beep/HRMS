@@ -116,3 +116,26 @@ Still incomplete: secured evidence attachments, lifecycle/expiry of assessments,
 skill-scale migrations, advanced configurable field forms, delegated admin,
 personnel privacy controls and a genuine industrial safety permit subsystem.
 Development/test-only. Do not load real personnel or certificate data.
+
+
+## PR #8 — Credentials Management (Phase 5 first vertical slice)
+
+- Per-enterprise CredentialType dictionary with mandatory expiry for
+  safety-critical credential types.
+- Persistent PersonCredential records with issue/start/expiry dates and
+  independent pending → verified/rejected → revoked lifecycle.
+- Immutable additive CredentialRequirement records for `activity_code`.
+- Server-side reusable fail-closed `evaluate_activity()` policy: deny with
+  `NO_POLICY` when no rules exist; AND across all required types; reject
+  missing, unverified, expired, revoked and future-effective records.
+- Non-admin person-level scope enforcement and owner linked-identity reads.
+- Write CSRF, independent reviewer, admin revocation, PostgreSQL composite
+  tenant constraints and audit events.
+- React panel for type/rule creation, document records, review, revocation
+  and date-specific activity eligibility diagnostics.
+- Alembic `0006_credentials`, regression tests and ADR-0006.
+
+**Not yet implemented:** cryptographically/physically verified documents,
+work order transaction enforcement, effective-dated policy publication,
+machine-specific credential applicability, notifications and production identity.
+Do not load real HR or high-risk safety permit data.
