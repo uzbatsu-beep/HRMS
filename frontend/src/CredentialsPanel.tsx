@@ -444,15 +444,17 @@ export default function CredentialsPanel() {
                       {records.map((record) => {
                         const label = typeById.get(record.type_id)?.name ?? "Документ";
                         const expired = record.expires_on && record.expires_on < localDate();
+                        const notStarted = record.valid_from > localDate();
                         const statusLabel = record.status === "pending" ? "Ожидает проверки" :
                           record.status === "verified"
-                            ? expired ? "Срок истёк" : "Проверен"
+                            ? expired ? "Срок истёк" :
+                              notStarted ? "Ещё не действует" : "Проверен"
                             : record.status === "revoked" ? "Отозван" : "Отклонён";
                         return (
                           <article className="credential-card" key={record.id}>
                             <div className="credential-card-head">
                               <strong>{label}</strong>
-                              <span className={`credential-state ${record.status}`}>
+                              <span className={`credential-state ${record.status} ${expired ? "is-expired" : notStarted ? "is-future" : ""}`}>
                                 {statusLabel}
                               </span>
                             </div>
