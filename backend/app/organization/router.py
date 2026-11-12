@@ -36,6 +36,19 @@ from app.organization.schemas import (
 router = APIRouter(prefix=f"{settings.api_v1_prefix}/org", tags=["organization"])
 
 
+def flush_or_conflict(db: Session) -> None:
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Conflicting organization data") from exc
+
+
+def lock_enterprise(db: Session, enterprise_id: UUID) -> None:
+    """Serialize structural writes within one enterprise, preventing concurrent cycles."""
+    db.execute(select(Enterprise).where(Enterprise.id == enterprise_id).with_for_update())
+
+
 def commit_or_conflict(db: Session) -> None:
     try:
         db.commit()
@@ -147,7 +160,7 @@ def create_enterprise(
 ) -> Enterprise:
     enterprise = Enterprise(code=payload.code.lower(), name=payload.name.strip())
     db.add(enterprise)
-    db.flush()
+    flush_or_conflict(db)
     audit(db, admin, enterprise.id, "enterprise.created", enterprise.id, {"code": enterprise.code})
     commit_or_conflict(db)
     db.refresh(enterprise)
@@ -187,7 +200,7 @@ def create_unit_type(
         enterprise_id=enterprise_id, code=payload.code.lower(), name=payload.name.strip()
     )
     db.add(unit_type)
-    db.flush()
+    flush_or_conflict(db)
     audit(
         db, admin, enterprise_id, "unit_type.created", unit_type.id,
         {"code": unit_type.code, "name": unit_type.name},
@@ -226,6 +239,7 @@ def create_unit(
     db: Session = Depends(get_db),  # noqa: B008
 ) -> OrganizationUnit:
     enterprise_or_404(db, enterprise_id)
+    lock_enterprise(db, enterprise_id)
     verify_type(db, enterprise_id, payload.type_id)
     verify_parent(db, enterprise_id, payload.parent_id)
     unit = OrganizationUnit(
@@ -236,7 +250,7 @@ def create_unit(
         parent_id=payload.parent_id,
     )
     db.add(unit)
-    db.flush()
+    flush_or_conflict(db)
     audit(
         db, admin, enterprise_id, "unit.created", unit.id,
         {"code": unit.code, "parent_id": unit.parent_id, "type_id": unit.type_id},
@@ -271,6 +285,7 @@ def update_unit(
     db: Session = Depends(get_db),  # noqa: B008
 ) -> OrganizationUnit:
     unit = unit_or_404(db, unit_id)
+    lock_enterprise(db, unit.enterprise_id)
     updates = payload.model_fields_set
     if not updates:
         raise HTTPException(status_code=422, detail="No changes provided")
@@ -332,7 +347,7 @@ def grant_scope(
         include_descendants=payload.include_descendants,
     )
     db.add(grant)
-    db.flush()
+    flush_or_conflict(db)
     audit(
         db, admin, unit.enterprise_id, "scope.granted", grant.id,
         {
