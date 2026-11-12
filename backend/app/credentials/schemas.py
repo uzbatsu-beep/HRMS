@@ -4,7 +4,7 @@ from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 Code = str
 CredentialKind = Literal["permit", "certificate", "qualification", "training"]
@@ -74,9 +74,25 @@ class CredentialReview(BaseModel):
     decision: Literal["verified", "rejected"]
     note: str = Field(min_length=10, max_length=1200)
 
+    @field_validator("note")
+    @classmethod
+    def substantive_note(cls, value: str) -> str:
+        note = value.strip()
+        if len(note) < 10:
+            raise ValueError("Review justification requires 10 non-whitespace characters")
+        return note
+
 
 class CredentialRevoke(BaseModel):
     reason: str = Field(min_length=10, max_length=1200)
+
+    @field_validator("reason")
+    @classmethod
+    def substantive_reason(cls, value: str) -> str:
+        reason = value.strip()
+        if len(reason) < 10:
+            raise ValueError("Revocation reason requires 10 non-whitespace characters")
+        return reason
 
 
 class RequirementCreate(BaseModel):
