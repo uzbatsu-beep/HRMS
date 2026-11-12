@@ -361,3 +361,96 @@ h2 { margin: 6px 0 0; font-size: 18px; letter-spacing: -.025em; }
   .skill-level-edit button { grid-column: 1 / -1; }
   .skill-assessment-heading { flex-wrap: wrap; }
 }
+
+
+/* PR #8 Credentials — muted industrial control, explicit safety states */
+.credential-panel { margin: 0 0 18px; padding: 23px 25px; border: 1px solid var(--line);
+  border-radius: 14px; background: var(--panel); }
+.credential-panel h3 { font-size: 14px; margin: 15px 0 10px; }
+.credential-intro { font-size: 12px; line-height: 1.7; color: var(--muted); margin-top: -3px; }
+.credential-flag { color: var(--accent); background: var(--accent-soft); border-radius: 7px;
+  padding: 7px 11px; font-size: 10px; white-space: nowrap; font-weight: 700; }
+.credential-panel label { display: grid; gap: 7px; font-size: 11px; font-weight: 650; min-width: 0; }
+.credential-panel :is(input,select,textarea) { width: 100%; min-width: 0;
+  border: 1px solid var(--line); border-radius: 7px; padding: 9px 10px;
+  color: var(--ink); background: #fff; font: inherit; font-size: 12px; }
+.credential-panel :is(input,select) { min-height: 38px; }
+.credential-panel textarea { min-height: 62px; resize: vertical; }
+.credential-panel :is(button,input,select,textarea):focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px; }
+.credential-button { min-height: 38px; padding: 8px 13px; border-radius: 7px;
+  background: var(--accent); border: 1px solid var(--accent);
+  color: #fff; font-size: 11px; font-weight: 750; cursor: pointer; }
+.credential-button:disabled { opacity: .55; cursor: wait; }
+.credential-button.secondary { background: #fff; color: var(--accent);
+  border-color: #c8dcd4; }
+.credential-button.danger { background: #fff4f3; color: #a53336; border-color: #efc4c3; }
+.credential-empty { color: var(--muted); font-size: 11px; line-height: 1.6;
+  padding: 12px; border-radius: 8px; background: #f6faf8; }
+.credential-controls { display: grid; grid-template-columns: 1fr 1fr;
+  gap: 12px; margin: 19px 0; }
+.credential-overview { display: grid; grid-template-columns: repeat(4,minmax(0,1fr));
+  gap: 8px; }
+.credential-overview > div { border-radius: 9px; padding: 13px; background: #f5f9f7;
+  border: 1px solid #e0ebe4; display: grid; gap: 7px; }
+.credential-overview strong { font-size: 22px; letter-spacing: -.04em; }
+.credential-overview span { color: var(--muted); font-size: 10px; }
+.credential-section { margin-top: 21px; padding-top: 4px; }
+.credential-rules { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.credential-rules > div { border-radius: 8px; border: 1px solid var(--line);
+  padding: 11px; display: flex; justify-content: space-between; gap: 12px;
+  align-items: center; background: #fff; }
+.credential-rules strong { font-size: 11px; overflow-wrap: anywhere; }
+.credential-rules span { font-size: 10px; color: var(--muted); text-align: right; }
+.credential-config { padding: 16px; background: #fafcfb; border-radius: 10px;
+  border: 1px solid var(--line); margin-top: 20px; }
+.credential-config details,.credential-editor { padding: 12px; margin: 9px 0;
+  background: #fff; border: 1px solid var(--line); border-radius: 9px; }
+.credential-panel summary { font-size: 12px; font-weight: 700; cursor: pointer; }
+.credential-form { margin-top: 13px; display: grid;
+  grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; align-items: end; }
+.credential-form > button { justify-self: start; }
+.credential-check { display: flex !important; align-items: center; gap: 8px; }
+.credential-panel .credential-check input { width: 16px; min-height: 16px; height: 16px;
+  accent-color: var(--accent); }
+.credential-hint { color: var(--muted); font-size: 11px; line-height: 1.7; margin: 10px 0 0; }
+.credential-list { display: grid; gap: 9px; }
+.credential-card { padding: 14px; border: 1px solid var(--line); border-radius: 9px;
+  background: #fff; }
+.credential-card-head { display: flex; justify-content: space-between;
+  align-items: center; gap: 10px; }
+.credential-card-head strong { font-size: 12px; }
+.credential-card p { color: var(--muted); font-size: 11px; line-height: 1.6; margin: 6px 0 0; }
+.credential-state { padding: 6px 8px; border-radius: 7px; white-space: nowrap;
+  font-size: 10px; font-weight: 700; }
+.credential-state.pending { background: #fdf6df; color: #82630c; }
+.credential-state.verified { background: #e8f7ee; color: #1a6e4b; }
+.credential-state.rejected,.credential-state.revoked { background: #ffefed; color: #aa3b3b; }
+.credential-review { border-top: 1px solid var(--line); padding-top: 12px;
+  display: grid; grid-template-columns: minmax(0,1fr) auto auto; gap: 8px;
+  align-items: end; margin-top: 12px; }
+.credential-review .credential-button { white-space: nowrap; }
+.credential-eligibility { padding: 17px; border-radius: 10px; border: 1px solid #d2e1dc;
+  background: #fafdfb; margin-top: 22px; }
+.credential-result { margin-top: 13px; border-radius: 9px; padding: 13px;
+  border: 1px solid; }
+.credential-result.allowed { color: #166844; background: #ecf8ee; border-color: #bfdec5; }
+.credential-result.blocked { color: #982d35; background: #fff1ef; border-color: #eac6c1; }
+.credential-result strong { font-size: 12px; }
+.credential-result p { font-size: 11px; margin: 8px 0 0; line-height: 1.6; }
+.credential-blocker { padding: 6px 8px; border-radius: 6px; background: #fff9f8; }
+.credential-error { color: #b13440; font-size: 12px; }
+.credential-success { color: #187151; font-size: 12px; }
+@media(max-width: 800px) {
+  .credential-overview { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .credential-review { grid-template-columns: 1fr 1fr; }
+  .credential-review label { grid-column: 1 / -1; }
+}
+@media(max-width: 550px) {
+  .credential-panel { padding: 17px 14px; }
+  .credential-controls,.credential-form,.credential-rules { grid-template-columns: 1fr; }
+  .credential-card-head { align-items: flex-start; flex-wrap: wrap; }
+}
+
+.credential-state.verified.is-expired { background: #ffefed; color: #aa3b3b; }
+.credential-state.verified.is-future { background: #fdf6df; color: #82630c; }
