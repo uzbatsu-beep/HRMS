@@ -2,7 +2,6 @@
 
 from collections.abc import Generator
 from datetime import date, timedelta
-from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
@@ -14,7 +13,7 @@ from app.database import Base, get_db
 from app.identity.models import UserAccount
 from app.identity.security import hash_password
 from app.main import app
-from app.credentials.models import CredentialAuditEvent, PersonCredential
+from app.credentials.models import CredentialAuditEvent
 
 
 PASSWORD = "credential-local-dev-password"
