@@ -1,0 +1,77 @@
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend - lint, migration and tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: twm_test
+          POSTGRES_USER: twm
+          POSTGRES_PASSWORD: twm_test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U twm -d twm_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TWM_APP_ENV: test
+      TWM_DATABASE_URL: postgresql+psycopg://twm:twm_test_password@localhost:5432/twm_test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+      - name: Install backend
+        working-directory: backend
+        run: python -m pip install --upgrade pip && pip install -e ".[dev]"
+      - name: Ruff lint
+        working-directory: backend
+        run: ruff check .
+      - name: Apply database migrations
+        working-directory: backend
+        run: alembic upgrade head
+      - name: Backend tests
+        working-directory: backend
+        run: pytest
+
+  frontend:
+    name: Frontend - typecheck and build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm install
+      - name: TypeScript check
+        working-directory: frontend
+        run: npm run check
+      - name: Production build
+        working-directory: frontend
+        run: npm run build
