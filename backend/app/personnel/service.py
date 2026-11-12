@@ -44,7 +44,9 @@ def lock_enterprise(db: Session, enterprise_id: object) -> None:
 def check_unit(db: Session, enterprise_id: object, unit_id: object) -> OrganizationUnit:
     unit = db.get(OrganizationUnit, unit_id)
     if unit is None or unit.enterprise_id != enterprise_id:
-        raise HTTPException(status_code=422, detail="Unit belongs to another enterprise or is missing")
+        raise HTTPException(
+            status_code=422, detail="Unit belongs to another enterprise or is missing"
+        )
     return unit
 
 
@@ -146,7 +148,10 @@ def check_assignment_availability(
     assignments = db.scalars(
         select(EmploymentAssignment).where(EmploymentAssignment.resource_id == resource_id)
     ).all()
-    if any(periods_overlap(item.effective_from, item.effective_to, start, end) for item in assignments):
+    if any(
+        periods_overlap(item.effective_from, item.effective_to, start, end)
+        for item in assignments
+    ):
         raise HTTPException(status_code=409, detail="Primary assignment dates overlap")
 
 
@@ -163,5 +168,8 @@ def check_team_availability(
             TeamMembership.unit_id == unit_id,
         )
     ).all()
-    if any(periods_overlap(item.effective_from, item.effective_to, start, end) for item in memberships):
+    if any(
+        periods_overlap(item.effective_from, item.effective_to, start, end)
+        for item in memberships
+    ):
         raise HTTPException(status_code=409, detail="Team membership dates overlap")
