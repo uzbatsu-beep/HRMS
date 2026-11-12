@@ -10,9 +10,7 @@ from sqlalchemy import create_engine, event, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
-from app.availability.models import (
-    AbsencePeriod, SchedulingAuditEvent, ShiftRule, WorkReservation,
-)
+from app.availability.models import SchedulingAuditEvent, ShiftRule, WorkReservation
 from app.database import Base, get_db
 from app.identity.models import UserAccount
 from app.identity.security import hash_password
