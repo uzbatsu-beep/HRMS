@@ -43,6 +43,26 @@ class ShiftRule(Base):
     valid_to: Mapped[date | None] = mapped_column(Date)
 
 
+class CalendarClosure(Base):
+    """Enterprise-wide local-date closure, e.g., shutdown or holiday."""
+
+    __tablename__ = "calendar_closures"
+    __table_args__ = (
+        UniqueConstraint(
+            "enterprise_id", "local_date", "time_zone",
+            name="uq_calendar_closure_tenant_local_day",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    enterprise_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("enterprises.id"), nullable=False
+    )
+    local_date: Mapped[date] = mapped_column(Date, nullable=False)
+    time_zone: Mapped[str] = mapped_column(String(80), nullable=False)
+    label: Mapped[str] = mapped_column(String(180), nullable=False)
+
+
 class AbsencePeriod(Base):
     """A full blocking interval. Reason is optional admin-only metadata."""
 
