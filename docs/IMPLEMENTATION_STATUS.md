@@ -71,3 +71,24 @@ Next: implement organization scope and role policies, then a real organizational
 Remaining work: full permission matrix, organizational membership/history for
 Person and WorkforceResource, enterprise-scoped domain APIs, retention policies,
 inactive/archive lifecycle and advanced configuration. Not production-ready.
+
+
+## PR #6 — Personnel Management (Phase 3 first vertical slice)
+
+- Created separate `Person` and assignable `WorkforceResource` entities with stable UUIDs.
+- Introduced dated primary `EmploymentAssignment` and additional `TeamMembership` history.
+- Implemented personnel roster/list/search, individual cards, updates, archive,
+  assignment creation, atomic department transfers, team joins and team closure.
+- Connected to PR #5 server-side scopes: nonadmins read only workers currently
+  assigned to a granted primary organizational unit; additional team affiliations
+  do not independently grant profile access.
+- Added personnel audit and migration `0004_personnel`, temporal validation and
+  cross-enterprise relational consistency.
+- React panel supports roster, filtering, profile creation/edit, transfer, team membership
+  and archive. Existing standalone HTML prototype is unchanged.
+- Pytest integration scenarios cover default-deny, tenant isolation, dated transfers,
+  team non-disclosure, history, archive, duplicate codes and time interval conflicts.
+
+Limitations: no position catalogue, fine-grained field PII permissions, production
+authentication safeguards, import/export or qualification/competence integration yet.
+Do not use synthetic-stage build for real HR records.

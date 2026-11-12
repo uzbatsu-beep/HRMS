@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import AuthPanel from "./AuthPanel";
 import OrganizationPanel from "./OrganizationPanel";
+import PersonnelPanel from "./PersonnelPanel";
 
 type ReadinessResponse = {
   status: string;
@@ -82,6 +83,7 @@ export default function App() {
 
       <AuthPanel />
       <OrganizationPanel />
+      <PersonnelPanel />
 
       <section className="system-panel" aria-labelledby="system-title">
         <div className="section-heading">

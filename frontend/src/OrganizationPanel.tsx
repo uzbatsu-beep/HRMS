@@ -236,6 +236,7 @@ export default function OrganizationPanel() {
       await action();
       setFeedback(message);
       setRefresh((old) => old + 1);
+      window.dispatchEvent(new Event("twm-org-changed"));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Ошибка изменения");
     } finally {
