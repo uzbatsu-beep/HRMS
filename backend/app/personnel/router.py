@@ -35,7 +35,6 @@ from app.personnel.schemas import (
     TransferCreate,
 )
 from app.personnel.service import (
-    active_during,
     admin_resource,
     check_assignment_availability,
     check_team_availability,
@@ -124,7 +123,7 @@ def list_persons(
 ) -> list[PersonView]:
     enterprise = require_enterprise(db, enterprise_id)
     if user.role != "admin" and not allowed_unit_ids(db, user, enterprise.id):
-        return []
+        raise HTTPException(status_code=404, detail="Enterprise not found")
     if include_archived and user.role != "admin":
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     if unit_id is not None:
@@ -148,7 +147,7 @@ def list_persons(
     if user.role != "admin" or unit_id is not None:
         allowed = allowed_unit_ids(db, user, enterprise_id)
         if user.role != "admin" and unit_id is not None and unit_id not in allowed:
-            return []
+            raise HTTPException(status_code=404, detail="Unit not found")
         target_ids = {unit_id} if unit_id is not None else allowed
         if not target_ids:
             return []
