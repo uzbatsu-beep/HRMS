@@ -1,4 +1,3 @@
-
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
@@ -35,14 +34,14 @@ def root() -> dict[str, str]:
     }
 
 
-@app.get("/api/v1/health/live", tags=["health"], summary="Liveness probe")
+@app.get(f"{settings.api_v1_prefix}/health/live", tags=["health"], summary="Liveness probe")
 def liveness() -> dict[str, str]:
     """Return success when the API process is running."""
 
     return {"status": "ok"}
 
 
-@app.get("/api/v1/health/ready", tags=["health"], summary="Readiness probe")
+@app.get(f"{settings.api_v1_prefix}/health/ready", tags=["health"], summary="Readiness probe")
 def readiness(db: Session = Depends(get_db)) -> dict[str, object]:  # noqa: B008
     """Return success only when the API can execute a database query."""
 
