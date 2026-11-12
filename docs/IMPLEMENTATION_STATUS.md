@@ -50,3 +50,24 @@ This is a foundation scaffold, not a completed production application. Authentic
 **Incomplete:** organizational scopes, detailed RBAC policy matrix, audit log, account lockout/rate limits, password reset and OIDC/SSO. Keep this stage limited to development/test environments and do not load real personal data.
 
 Next: implement organization scope and role policies, then a real organizational hierarchy API and UI.
+
+
+## PR #5 — Organization Management and RBAC Scope (Phase 2)
+
+- Organization domains: Enterprise, customizable UnitType, arbitrary-depth
+  OrganizationUnit tree, UserUnitScope grants, append-only organization audit.
+- API: enterprise and unit-type creation, hierarchy creation/read/move/edit,
+  scope grant/list/revoke and audit read.
+- Viewer and manager roles are **default-deny** for organizations without
+  explicit grants. A grant may include descendants; unrelated subtrees remain hidden.
+- Admin creates/edits structure and permissions; all mutations require session CSRF.
+- Database migration 0003 adds relational constraints including composite foreign
+  keys to prevent cross-enterprise parent/type assignment.
+- React organization panel supports tree display, enterprise/type/unit creation,
+  changing parent or type, user scope grants and revocation.
+- API integration tests cover authorization, scope isolation, hierarchy cycles,
+  cross-enterprise references, duplicate codes and audit.
+
+Remaining work: full permission matrix, organizational membership/history for
+Person and WorkforceResource, enterprise-scoped domain APIs, retention policies,
+inactive/archive lifecycle and advanced configuration. Not production-ready.

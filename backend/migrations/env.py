@@ -7,6 +7,7 @@ from app.config import settings
 from app.database import Base
 import app.models  # noqa: F401 - register models in SQLAlchemy metadata.
 import app.identity.models  # noqa: F401 - register identity models in SQLAlchemy metadata.
+import app.organization.models  # noqa: F401 - register organization tables.
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
