@@ -479,3 +479,87 @@ def test_cross_enterprise_resource_isolation_and_admin_csrf(
     assert client.get(
         f"{BASE}/persons/{s['person']}/check", params=interval()
     ).status_code == 401
+
+
+def test_spring_dst_gap_rejects_nonexistent_shift_boundary(
+    scenario: tuple[TestClient, Session],
+) -> None:
+    client, _ = scenario
+    s = seed(client)
+    add_shift(client, s["resource"], weekday=6, start="02:30:00", end="04:00:00")
+    result = check(client, s["person"], {
+        "start": "2026-03-08T07:30:00+00:00",
+        "end": "2026-03-08T08:00:00+00:00",
+    })
+    assert result["available"] is False
+    assert "AMBIGUOUS_SHIFT_TIME" in {b["code"] for b in result["blockers"]}
+
+
+def test_later_absence_rechecks_previously_reserved_interval(
+    scenario: tuple[TestClient, Session],
+) -> None:
+    client, _ = scenario
+    s = seed(client)
+    add_shift(client, s["resource"])
+    morning = interval()
+    post(
+        client, f"{BASE}/resources/{s['resource']}/reservations",
+        {"starts_at": morning["start"], "ends_at": morning["end"]},
+    )
+    # Last-minute absence is authoritative even when a reservation already exists.
+    post(
+        client, f"{BASE}/resources/{s['resource']}/absences",
+        {
+            "starts_at": morning["start"], "ends_at": morning["end"],
+            "category": "unavailable",
+        },
+    )
+    result = check(client, s["person"])
+    assert not result["available"]
+    assert {x["code"] for x in result["blockers"]} == {"BOOKED", "ABSENT"}
+
+
+def test_verified_self_account_reads_only_its_own_calendar(
+    scenario: tuple[TestClient, Session],
+) -> None:
+    client, _ = scenario
+    s = seed(client)
+    other = post(
+        client, f"/api/v1/personnel/enterprises/{s['enterprise']}/persons",
+        {
+            "employee_code": "SP999", "first_name": "Other", "last_name": "Worker",
+            "unit_id": s["foreign_unit"], "effective_from": "2020-01-01",
+        },
+    )
+    login(client)
+    users = client.get("/api/v1/auth/users").json()
+    viewer_id = next(
+        row["id"] for row in users if row["username"] == "sched-viewer"
+    )
+    post(
+        client, "/api/v1/competence/links",
+        {"user_id": viewer_id, "person_id": s["person"]},
+    )
+    add_shift(client, s["resource"])
+    login(client, "sched-viewer")
+    visible = client.get(
+        f"{BASE}/persons/{s['person']}/calendar",
+        params={
+            "start": utc_time(next_monday(), 8),
+            "end": utc_time(next_monday(), 18),
+        },
+    )
+    assert visible.status_code == 200, visible.text
+    not_visible = client.get(
+        f"{BASE}/persons/{other['id']}/calendar",
+        params={
+            "start": utc_time(next_monday(), 8),
+            "end": utc_time(next_monday(), 18),
+        },
+    )
+    assert not_visible.status_code == 404
+    assert client.post(
+        f"{BASE}/resources/{s['resource']}/reservations",
+        headers=login(client, "sched-viewer"),
+        json={"starts_at": interval()["start"], "ends_at": interval()["end"]},
+    ).status_code == 403
