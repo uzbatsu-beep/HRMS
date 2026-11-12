@@ -292,6 +292,20 @@ export default function CompetencePanel() {
     }, "Новая компетенция добавлена.");
   }
 
+  function archiveSkill(skill: Skill) {
+    if (!session || !window.confirm(
+      `Архивировать навык «${skill.name}»? История оценок сохранится.`
+    )) return;
+    void submit(
+      () => api(
+        `${apiBase}/skills/${skill.id}/archive`,
+        { method: "POST" },
+        session.csrf_token,
+      ),
+      "Навык архивирован, история оценок сохранена.",
+    );
+  }
+
   function linkAccount(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!session) return;
@@ -395,6 +409,12 @@ export default function CompetencePanel() {
                       <strong>{skill.name}</strong>
                       <small>{skill.code} · {categoryName.get(skill.category_id) ?? "—"} ·
                         {scale ? ` ${scale.name}, v${scale.version}` : " Шкала не найдена"}</small>
+                      {isAdmin && (
+                        <button type="button" className="skill-button skill-secondary"
+                          disabled={busy} onClick={() => archiveSkill(skill)}>
+                          Архивировать
+                        </button>
+                      )}
                     </div>
                   );
                 })}
