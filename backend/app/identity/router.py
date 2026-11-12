@@ -44,7 +44,11 @@ def login(
     user = db.scalar(
         select(UserAccount).where(UserAccount.username == normalize_username(payload.username))
     )
-    if user is None or not user.is_active or not verify_password(payload.password, user.password_hash):
+    if (
+        user is None
+        or not user.is_active
+        or not verify_password(payload.password, user.password_hash)
+    ):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     raw_token = secrets.token_urlsafe(32)
@@ -80,7 +84,11 @@ def me(
     return SessionResult(user=UserView.model_validate(user), csrf_token=record.csrf_token)
 
 
-@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(require_csrf)])
+@router.post(
+    "/logout",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_csrf)],
+)
 def logout(
     response: Response,
     record: LoginSession = Depends(get_authenticated_session),  # noqa: B008
