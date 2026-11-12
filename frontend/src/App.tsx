@@ -1,6 +1,7 @@
 
 import { useEffect, useState } from "react";
 import AuthPanel from "./AuthPanel";
+import OrganizationPanel from "./OrganizationPanel";
 
 type ReadinessResponse = {
   status: string;
@@ -80,6 +81,7 @@ export default function App() {
       </section>
 
       <AuthPanel />
+      <OrganizationPanel />
 
       <section className="system-panel" aria-labelledby="system-title">
         <div className="section-heading">
