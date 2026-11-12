@@ -1,5 +1,6 @@
 """Organization API tests: hierarchy, tenancy boundaries, explicit scopes, CSRF, audit."""
 
+import json
 from collections.abc import Generator
 from uuid import UUID
 
@@ -157,7 +158,7 @@ def test_authentication_and_csrf_are_required(
 def test_create_custom_hierarchy_and_reject_cycles(
     org_client: tuple[TestClient, Session, dict[str, str]],
 ) -> None:
-    client, _, _ = org_client
+    client, db, _ = org_client
     csrf = authenticate(client, "admin")
     enterprise = create_enterprise(client, csrf, "factory")
     second = create_enterprise(client, csrf, "second")
@@ -212,6 +213,13 @@ def test_create_custom_hierarchy_and_reject_cycles(
         headers=csrf, json={"name": "New name", "parent_id": None},
     ).status_code == 200
     assert client.get(f"/api/v1/org/units/{leaf['id']}").json()["name"] == "New name"
+    edit_event = next(
+        row for row in db.scalars(select(OrganizationAuditEvent)).all()
+        if row.action == "unit.updated" and str(row.subject_id) == leaf["id"]
+    )
+    details = json.loads(edit_event.details_json)
+    assert details["before"]["parent_id"] == child["id"]
+    assert details["changes"]["parent_id"] is None
 
 
 def test_explicit_scope_filters_enterprises_subtrees_and_detail(
