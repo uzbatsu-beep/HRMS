@@ -279,7 +279,7 @@ def test_transfer_changes_effective_visibility_and_preserves_history(
     assert len(detail.json()["assignments"]) == 1  # Hidden old unit history is not leaked.
     assert detail.json()["assignments"][0]["unit_id"] == mechanics
 
-    login(client, "admin")
+    csrf = login(client, "admin")
     history = client.get(f"/api/v1/personnel/persons/{person['id']}").json()
     assert len(history["assignments"]) == 2
     previous = next(row for row in history["assignments"] if row["unit_id"] == automation)
