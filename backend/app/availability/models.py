@@ -41,6 +41,7 @@ class ShiftRule(Base):
     time_zone: Mapped[str] = mapped_column(String(80), nullable=False)
     valid_from: Mapped[date] = mapped_column(Date, nullable=False)
     valid_to: Mapped[date | None] = mapped_column(Date)
+    disabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class CalendarClosure(Base):
