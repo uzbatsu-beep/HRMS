@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.identity.router import router as identity_router
+from app.organization.router import router as organization_router
 
 app = FastAPI(
     title=settings.app_name,
@@ -24,6 +25,7 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "X-Request-ID", "X-CSRF-Token"],
 )
 app.include_router(identity_router)
+app.include_router(organization_router)
 
 
 @app.get("/", tags=["system"], summary="API information")
