@@ -451,3 +451,6 @@ h2 { margin: 6px 0 0; font-size: 18px; letter-spacing: -.025em; }
   .credential-controls,.credential-form,.credential-rules { grid-template-columns: 1fr; }
   .credential-card-head { align-items: flex-start; flex-wrap: wrap; }
 }
+
+.credential-state.verified.is-expired { background: #ffefed; color: #aa3b3b; }
+.credential-state.verified.is-future { background: #fdf6df; color: #82630c; }
