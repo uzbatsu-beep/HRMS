@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useWorkspace } from "./WorkspaceContext";
 import WorkExecutionPanel from "./WorkExecutionPanel";
+import WorkEquipmentPermitPanel from "./WorkEquipmentPermitPanel";
 
 type User = { id: string; username: string; role: "admin" | "manager" | "viewer" };
 type Session = { user: User; csrf_token: string };
@@ -44,7 +45,7 @@ const statuses: Record<Work["status"], string> = {
   completed: "Выполнен", cancelled: "Отменён",
 };
 const sources: Record<string, string> = {
-  person: "Сотрудник", organization: "Подразделение",
+  person: "Сотрудник", organization: "Подразделение", equipment: "Оборудование",
   skill: "Компетенция", credential: "Допуск", calendar: "График",
 };
 const readableCodes: Record<string, string> = {
@@ -493,6 +494,22 @@ export default function WorkPanel() {
               ) : <p className="wm-empty">Выберите наряд в журнале.</p>}
             </div>
           </div>
+
+          {selectedOrder && (
+            <WorkEquipmentPermitPanel
+              key={"equipment-" + selectedOrder.id}
+              work={{
+                id: selectedOrder.id,
+                enterprise_id: selectedOrder.enterprise_id,
+                status: selectedOrder.status,
+              }}
+              csrfToken={session.csrf_token}
+              actorRole={session.user.role}
+              actorId={session.user.id}
+              canDispatch={dispatcher}
+              onChanged={() => setRevision((old) => old + 1)}
+            />
+          )}
 
           {selectedOrder && (
             <WorkExecutionPanel

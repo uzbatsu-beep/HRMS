@@ -973,3 +973,35 @@ h2 { margin: 6px 0 0; font-size: 18px; letter-spacing: -.025em; }
   .config-field, .config-person-fields form { grid-template-columns: 1fr; }
   .config-heading { flex-direction: column; }
 }
+
+
+/* PR #17: scoped equipment register and human-attested permits */
+
+.equipment-panel, .wm-permit { display: grid; gap: 14px; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
+.equipment-panel h2 { font-size: 20px; }
+.equipment-panel h3, .wm-permit h3 { font-size: 15px; margin: 0; }
+.equipment-panel h4, .wm-permit h4 { margin: 7px 0; font-size: 12px; }
+.equipment-panel p, .wm-permit p { font-size: 11px; line-height: 1.65; color: #6c7a74; }
+.equipment-heading { display: flex; justify-content: space-between; gap: 20px; align-items: start; }
+.equipment-panel button, .wm-permit button { cursor: pointer; border: 1px solid #c5dcd2; border-radius: 7px; padding: 9px 12px; color: #176e60; background: #e7f3ee; font-size: 11px; font-weight: 700; }
+.equipment-panel button:disabled, .wm-permit button:disabled { opacity: .5; cursor: not-allowed; }
+.equipment-panel label, .wm-permit label { display: flex; flex-direction: column; gap: 6px; color: #52645d; font-size: 11px; }
+.wm-permit label:has(input[type="checkbox"]) { flex-direction: row; align-items: center; }
+.equipment-panel input, .equipment-panel select, .equipment-panel textarea, .wm-permit input:not([type="checkbox"]), .wm-permit select, .wm-permit textarea { min-height: 35px; width: 100%; background: #fff; border: 1px solid #d5e2dc; padding: 7px 10px; border-radius: 7px; font: inherit; }
+.equipment-editor, .equipment-detail { border: 1px solid var(--line); border-radius: 9px; padding: 16px; }
+.equipment-editor summary { cursor: pointer; font-weight: 700; font-size: 12px; }
+.equipment-editor form { display: grid; gap: 13px; margin-top: 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.equipment-layout { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(260px, 1.5fr); gap: 14px; align-items: start; }
+.equipment-list { display: grid; gap: 7px; min-width: 0; }
+.equipment-list button { display: flex; flex-direction: column; text-align: left; gap: 4px; color: #253f36; background: #fff; border: 1px solid var(--line); padding: 14px; }
+.equipment-list button.active { background: var(--accent-soft); border-color: #96b9aa; }
+.equipment-list button small { font-size: 10px; color: var(--muted); }
+.equipment-actions, .wm-permit-form { display: grid; gap: 10px; padding: 12px 0; }
+.equipment-error { padding: 12px; color: #9f3d40 !important; background: #fdf0f0; }
+.equipment-notice { padding: 12px; color: #176e60 !important; background: #e9f5ef; }
+.wm-permit { margin-top: 15px; padding: 18px; }
+.wm-permit .wm-blockers { border-left: 3px solid #b7743a; padding: 7px 12px; background: #fbf5ec; }
+@media (max-width: 770px) {
+  .equipment-layout, .equipment-editor form { grid-template-columns: 1fr; }
+  .equipment-heading { flex-direction: column; }
+}

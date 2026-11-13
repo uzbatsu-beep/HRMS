@@ -14,6 +14,7 @@ from app.availability.models import ShiftRule
 from app.availability.service import as_utc, evaluate
 from app.competence.models import PersonSkillAssessment, Skill, SkillScaleLevel
 from app.credentials.service import evaluate_activity
+from app.equipment.service import required_asset_credentials
 from app.identity.models import UserAccount
 from app.organization.models import Enterprise
 from app.personnel.models import Person, WorkforceResource
@@ -168,6 +169,17 @@ def assess_candidate(
                     block("credential", failure.code, f"{on.isoformat()}: {failure.message}")
                 for proof in check.valid_credentials:
                     credential_ids.add(proof.credential_id)
+
+    if resource is not None and person.enterprise_id == work.enterprise_id:
+        # Equipment-specific credentials are cumulative, never a substitute
+        # for the immutable activity permit policy above.
+        asset_failures, asset_credentials = required_asset_credentials(
+            db, work, person, relevant_dates(db, resource.id, start, end)
+        )
+        for issue in asset_failures:
+            code = issue.split(":")[0]
+            block("credential", code, issue)
+        credential_ids.update(asset_credentials)
 
     if resource is not None and person.enterprise_id == work.enterprise_id:
         calendar = evaluate(

@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.availability.models import WorkReservation
 from app.availability.service import as_utc
+from app.equipment.service import equipment_problems
 from app.personnel.models import Person
 from app.work.models import WorkCrewMember, WorkOrder, WorkOrderAssignment
 from app.work.schemas import Blocker, CandidateView, SafetyCheck, SafetyMember
@@ -83,17 +84,23 @@ def team_safety_check(db: Session, order: WorkOrder) -> SafetyCheck:
             role=role, person_id=person_id, reservation_valid=valid,
             candidate=result,
         ))
+    asset_blockers = [
+        Blocker(source="equipment", code=code, message=code.replace("_", " ").lower())
+        for code in equipment_problems(db, order)
+    ]
     return SafetyCheck(
         work_order_id=order.id, checked_at=as_utc(utcnow()),
         status=order.status,
-        passed=bool(leader) and all(member.candidate.eligible for member in members),
-        members=members,
+        passed=bool(leader) and not asset_blockers
+        and all(member.candidate.eligible for member in members),
+        members=members, equipment_blockers=asset_blockers,
     )
 
 
 def summarize_failures(check: SafetyCheck) -> dict[str, object]:
     return {
         "message": "One or more crew members failed mandatory work gates",
+        "equipment_blockers": [block.model_dump() for block in check.equipment_blockers],
         "members": [
             {
                 "person_id": str(member.person_id),
