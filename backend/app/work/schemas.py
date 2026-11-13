@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class RequiredSkillCreate(BaseModel):
@@ -31,6 +31,7 @@ class WorkCreate(BaseModel):
     starts_at: AwareDatetime
     ends_at: AwareDatetime
     required_skills: list[RequiredSkillCreate] = Field(min_length=1, max_length=20)
+    priority: Literal["routine", "normal", "urgent", "critical"] = "normal"
 
     @model_validator(mode="after")
     def unique_requirements(self) -> "WorkCreate":
@@ -53,6 +54,34 @@ class AssignmentView(BaseModel):
     assigned_at: datetime
 
 
+class CrewCreate(BaseModel):
+    person_id: UUID
+    role: Literal["specialist", "assistant", "observer"]
+
+
+class LeadReplacement(BaseModel):
+    person_id: UUID
+    reason: str = Field(min_length=10, max_length=400)
+
+    @field_validator("reason")
+    @classmethod
+    def substantive_reason(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 10:
+            raise ValueError("Replacement justification needs at least 10 characters")
+        return value
+
+
+class CrewMemberView(BaseModel):
+    id: UUID
+    person_id: UUID
+    resource_id: UUID
+    reservation_id: UUID
+    role: Literal["specialist", "assistant", "observer"]
+    joined_at: datetime
+    removed_at: datetime | None
+
+
 class WorkView(BaseModel):
     id: UUID
     enterprise_id: UUID
@@ -63,13 +92,18 @@ class WorkView(BaseModel):
     activity_code: str
     starts_at: datetime
     ends_at: datetime
-    status: Literal["open", "assigned", "in_progress", "completed", "cancelled"]
+    status: Literal["open", "assigned", "in_progress", "on_hold", "completed", "cancelled"]
     created_at: datetime
     started_at: datetime | None
     completed_at: datetime | None
     cancelled_at: datetime | None
     required_skills: list[RequiredSkillView]
     assignment: AssignmentView | None
+    priority: Literal["routine", "normal", "urgent", "critical"]
+    crew: list[CrewMemberView]
+    on_hold_at: datetime | None
+    hold_reason: str | None
+    last_safety_check_at: datetime | None
 
 
 class Blocker(BaseModel):
@@ -96,6 +130,33 @@ class AssignmentCreate(BaseModel):
 class AssignmentDecision(BaseModel):
     eligible: bool
     candidate: CandidateView
+
+
+class SafetyMember(BaseModel):
+    role: Literal["lead", "specialist", "assistant", "observer"]
+    person_id: UUID
+    reservation_valid: bool
+    candidate: CandidateView
+
+
+class SafetyCheck(BaseModel):
+    work_order_id: UUID
+    checked_at: datetime
+    status: str
+    passed: bool
+    members: list[SafetyMember]
+
+
+class ReasonNote(BaseModel):
+    reason: str = Field(min_length=10, max_length=400)
+
+    @field_validator("reason")
+    @classmethod
+    def substantive_reason(cls, value: str) -> str:
+        note = value.strip()
+        if len(note) < 10:
+            raise ValueError("Reason must contain at least 10 non-whitespace characters")
+        return note
 
 
 class WorkAuditView(BaseModel):
