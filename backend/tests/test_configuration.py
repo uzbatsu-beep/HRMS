@@ -161,7 +161,9 @@ def test_workflow_is_dual_control_and_immutable(
     vid = row["id"]
     assert row["status"] == "draft" and row["version"] == 1
     assert transition(client, vid, "approve", "config-reviewer").status_code == 409
-    assert transition(client, vid, "publish").status_code == 409
+    assert transition(
+        client, vid, "publish", data={"effective_on": date.today().isoformat()},
+    ).status_code == 409
 
     response = client.put(
         f"{BASE}/versions/{vid}", json=schema(), headers=login(client),
