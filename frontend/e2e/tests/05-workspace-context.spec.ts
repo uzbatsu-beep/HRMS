@@ -98,7 +98,7 @@ test("reading the access page and creating a user preserves workplace filters", 
   const create = page.locator(".auth-create");
   await create.getByLabel("Логин").fill("e2e-new-" + Date.now().toString(36));
   await create.getByLabel(/Временный пароль/).fill(process.env.E2E_ACTOR_PASSWORD!);
-  await create.getByLabel("Роль").selectOption("viewer");
+  await create.locator("select").selectOption("viewer");
   await create.getByRole("button", { name: "Создать" }).click();
   await expect(page.locator(".auth-success")).toContainText("создан");
   await expect(rail.getByRole("button", { name: /E2E Автоматизация/ }))
