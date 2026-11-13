@@ -381,7 +381,7 @@ def test_late_absence_blocks_start_and_cancellation_releases_booking(
     post(
         client, f"/api/v1/availability/resources/{s['resource']}/absences",
         {
-            "starts_at": work["starts_at"], "ends_at": work["ends_at"],
+            "starts_at": interval()[0], "ends_at": interval()[1],
             "category": "unavailable",
         },
     )
