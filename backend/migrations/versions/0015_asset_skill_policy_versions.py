@@ -36,7 +36,7 @@ def upgrade() -> None:
         "AND expected_version IS NULL) OR "
         "(kind = 'skill_upgrade' AND credential_type_id IS NULL "
         "AND skill_id IS NOT NULL AND scale_id IS NOT NULL AND min_level_id IS NOT NULL "
-        "AND expected_version >= 1)",
+        "AND expected_version IS NOT NULL AND expected_version >= 1)",
     )
     op.create_table(
         "asset_skill_policy_revisions",
@@ -77,9 +77,20 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Deliberately drops only revision metadata; restored v1 remains the
-    # original immutable threshold. Never silently preserve upgraded gates
-    # on a downgraded backend that cannot evaluate the revision table.
+    # Deleting approved upgrades or their review history could silently
+    # lower the enforced skill threshold on a downgraded backend. Fail closed.
+    db = op.get_bind()
+    count = db.execute(
+        sa.text("SELECT COUNT(*) FROM asset_skill_policy_revisions")
+    ).scalar_one()
+    proposals = db.execute(
+        sa.text("SELECT COUNT(*) FROM asset_policy_proposals "
+                "WHERE kind = 'skill_upgrade'")
+    ).scalar_one()
+    if count or proposals:
+        raise RuntimeError(
+            "Refusing downgrade: skill policy revisions or proposal history exist"
+        )
     op.drop_table("asset_skill_policy_revisions")
     op.drop_constraint(
         "ck_policy_proposal_kind_payload", "asset_policy_proposals", type_="check"

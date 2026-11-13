@@ -161,7 +161,7 @@ class AssetPolicyProposal(Base):
             "AND expected_version IS NULL) OR "
             "(kind = 'skill_upgrade' AND credential_type_id IS NULL "
             "AND skill_id IS NOT NULL AND scale_id IS NOT NULL AND min_level_id IS NOT NULL "
-            "AND expected_version >= 1)",
+            "AND expected_version IS NOT NULL AND expected_version >= 1)",
             name="ck_policy_proposal_kind_payload",
         ),
         CheckConstraint(
