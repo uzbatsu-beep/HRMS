@@ -5,6 +5,7 @@ test("configurator publishes independent-approved person fields end-to-end", asy
   const seed = demo();
   await loginUI(page);
   await page.goto("/#configuration");
+  await page.locator(".workspace-rail").getByLabel("Предприятие").selectOption(seed.enterprise.id);
   const panel = page.locator("#configuration");
   await expect(panel).toBeVisible();
   await expect(panel).toContainText("Конфигуратор дополнительных полей");
