@@ -174,6 +174,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   const setEnterpriseId = useCallback<Dispatch<SetStateAction<string>>>((action) => {
     const candidate = typeof action === "function" ? action(enterpriseId) : action;
+    // Refreshing the old selection must not invalidate a pending, authorized
+    // creation returned by POST while the enterprise list is still loading.
+    if (candidate === enterpriseId) return;
     if (candidate && !enterprises.some((entry) => entry.id === candidate)) {
       // A new company may be returned by a successful POST before the global
       // listing refreshes. Do not select it until server read access confirms.
