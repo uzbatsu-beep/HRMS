@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.availability.models import ShiftRule
-from app.availability.service import as_utc, check_range, evaluate
+from app.availability.service import as_utc, evaluate
 from app.competence.models import PersonSkillAssessment, Skill, SkillScaleLevel
 from app.credentials.service import evaluate_activity
 from app.identity.models import UserAccount
