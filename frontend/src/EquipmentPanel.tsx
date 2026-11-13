@@ -7,8 +7,24 @@ type Asset = {
   serial_number: string | null;
   status: "active" | "out_of_service";
   required_credential_type_ids: string[];
+  required_skills: AssetSkill[];
 };
 type CredentialType = { id: string; code: string; name: string };
+type AssetSkill = { id: string; skill_id: string; skill_code: string;
+  skill_name: string; min_level_id: string; min_ordinal: number };
+type Skill = { id: string; name: string; code: string; scale_id: string; is_active: boolean };
+type Scale = { id: string; levels: { id: string; ordinal: number; label: string }[] };
+type Readiness = { enterprise_id: string; total: number; blocked: number;
+  on_hold: number; items: ReadinessWork[] };
+type ReadinessWork = { work_order_id: string; work_code: string; title: string;
+  asset_code: string; unit_id: string; status: string;
+  permit_status: string | null; software_blockers: string[] };
+const blockerNames: Record<string, string> = {
+  EQUIPMENT_OUT_OF_SERVICE: "Оборудование выведено из эксплуатации",
+  WORK_PERMIT_NOT_APPROVED: "Нет согласованного разрешения",
+  WORK_PERMIT_INCOMPLETE: "Контрольный лист разрешения неполон",
+  EQUIPMENT_MISSING: "Оборудование недоступно",
+};
 
 async function api<T>(url: string, csrf?: string, method = "GET", data?: object): Promise<T> {
   const response = await fetch(url, {
@@ -40,6 +56,11 @@ export default function EquipmentPanel() {
   const admin = session?.user.role === "admin";
   const [assets, setAssets] = useState<Asset[]>([]);
   const [types, setTypes] = useState<CredentialType[]>([]);
+  const [skills, setSkills] = useState<Skill[]>([]);
+  const [scales, setScales] = useState<Scale[]>([]);
+  const [readiness, setReadiness] = useState<Readiness | null>(null);
+  const [skillId, setSkillId] = useState("");
+  const [minLevelId, setMinLevelId] = useState("");
   const [selectedId, setSelectedId] = useState("");
   const [unitId, setUnitId] = useState("");
   const [code, setCode] = useState("");
@@ -54,7 +75,8 @@ export default function EquipmentPanel() {
   const [rev, setRev] = useState(0);
 
   useEffect(() => {
-    setAssets([]); setTypes([]); setSelectedId(""); setError(""); setNotice("");
+    setAssets([]); setTypes([]); setSkills([]); setScales([]);
+    setReadiness(null); setSelectedId(""); setError("");
     if (!session || !enterpriseId) return;
     const controller = new AbortController();
     const root = "/api/v1/equipment/enterprises/" + enterpriseId;
@@ -69,11 +91,36 @@ export default function EquipmentPanel() {
         "/api/v1/credentials/enterprises/" + enterpriseId + "/types", {
           credentials: "same-origin", signal: controller.signal,
         },
-      ).then(async response => response.ok
-        ? await response.json() as CredentialType[] : []) : Promise.resolve([]),
-    ]).then(([list, kindsList]) => {
+      ).then(async response => {
+        if (!response.ok) throw new Error("Credential types HTTP " + response.status);
+        return await response.json() as CredentialType[];
+      }) : Promise.resolve([] as CredentialType[]),
+      admin ? fetch(
+        "/api/v1/competence/enterprises/" + enterpriseId + "/skills", {
+          credentials: "same-origin", signal: controller.signal,
+        },
+      ).then(async response => {
+        if (!response.ok) throw new Error("Skills HTTP " + response.status);
+        return await response.json() as Skill[];
+      }) : Promise.resolve([] as Skill[]),
+      admin ? fetch(
+        "/api/v1/competence/enterprises/" + enterpriseId + "/scales", {
+          credentials: "same-origin", signal: controller.signal,
+        },
+      ).then(async response => {
+        if (!response.ok) throw new Error("Scales HTTP " + response.status);
+        return await response.json() as Scale[];
+      }) : Promise.resolve([] as Scale[]),
+      fetch(root + "/readiness", {
+        credentials: "same-origin", signal: controller.signal,
+      }).then(async response => {
+        if (!response.ok) throw new Error("Readiness HTTP " + response.status);
+        return await response.json() as Readiness;
+      }),
+    ]).then(([list, kindsList, skillList, scaleList, report]) => {
       if (controller.signal.aborted) return;
       setAssets(list); setTypes(kindsList);
+      setSkills(skillList); setScales(scaleList); setReadiness(report);
       setSelectedId((old) => list.some(x => x.id === old) ? old : list[0]?.id ?? "");
     }).catch((cause: unknown) => {
       if (!controller.signal.aborted) setError(
@@ -96,6 +143,8 @@ export default function EquipmentPanel() {
     }
   }
   const asset = assets.find(x => x.id === selectedId);
+  const selectedSkill = skills.find(x => x.id === skillId);
+  const levels = scales.find(x => x.id === selectedSkill?.scale_id)?.levels ?? [];
   const root = "/api/v1/equipment";
   const csrf = session?.csrf_token;
 
@@ -194,8 +243,51 @@ export default function EquipmentPanel() {
                 </ul>
               ) : <p>Дополнительные требования не указаны. Основные требования
                 вида работ сохраняются.</p>}
+              <h4>Обязательные компетенции на оборудовании</h4>
+              {asset.required_skills.length > 0 ? (
+                <ul>
+                  {asset.required_skills.map(rule => (
+                    <li key={rule.id}>{rule.skill_name}: уровень ≥ {rule.min_ordinal}</li>
+                  ))}
+                </ul>
+              ) : <p>Специфические навыки оборудования ещё не заданы.
+                Требования самого наряда сохраняются.</p>}
               {admin && (
                 <>
+                  <div className="equipment-actions">
+                    <label>Требуемая компетенция
+                      <select aria-label="Компетенция оборудования"
+                        value={skillId} onChange={e => {
+                          setSkillId(e.target.value);
+                          setMinLevelId("");
+                        }}>
+                        <option value="">Выберите компетенцию</option>
+                        {skills.filter(skill => skill.is_active &&
+                          !asset.required_skills.some(x => x.skill_id === skill.id),
+                        ).map(skill => (
+                          <option key={skill.id} value={skill.id}>{skill.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>Минимальный подтверждённый уровень
+                      <select aria-label="Уровень компетенции оборудования"
+                        value={minLevelId} onChange={e => setMinLevelId(e.target.value)}>
+                        <option value="">Выберите уровень</option>
+                        {levels.map(level => (
+                          <option key={level.id} value={level.id}>
+                            {level.ordinal} — {level.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button type="button" disabled={busy || !skillId || !minLevelId}
+                      onClick={() => void mutate(() => api<Asset>(
+                        root + "/assets/" + asset.id + "/required-skills",
+                        csrf, "POST", { skill_id: skillId, min_level_id: minLevelId },
+                      ), "Обязательная компетенция оборудования добавлена.")}>
+                      Добавить требование к навыку
+                    </button>
+                  </div>
                   <div className="equipment-actions">
                     <label>Добавить обязательный тип допуска
                       <select value={selectedType} onChange={e => setSelectedType(e.target.value)}>
@@ -231,6 +323,32 @@ export default function EquipmentPanel() {
             </>
           )}
         </div>
+      </div>
+      <div className="equipment-readiness" aria-label="Операционная сводка оборудования">
+        <h3>Операционная сводка связанных нарядов</h3>
+        <p>Оценка только состояния актива и разрешения на работы.
+          Она не проверяет персонал и не является допуском к опасным работам.</p>
+        {readiness && (
+          <>
+            <div className="equipment-readiness-kpis">
+              <strong>Связано: {readiness.total}</strong>
+              <strong>Блокирующие условия: {readiness.blocked}</strong>
+              <strong>Приостановлено в HRMS: {readiness.on_hold}</strong>
+            </div>
+            {readiness.items.map(item => (
+              <div className="equipment-readiness-item" key={item.work_order_id}>
+                <strong>{item.work_code} · {item.title}</strong>
+                <small>{item.asset_code} · {item.status}
+                  {" · "}{item.permit_status ?? "Нет разрешения"}</small>
+                {item.software_blockers.map(code => (
+                  <span key={code} className="wm-warning">{blockerNames[code] ?? code}</span>
+                ))}
+              </div>
+            ))}
+            {readiness.items.length === 0 &&
+              <p>Активных связанных нарядов в доступных подразделениях нет.</p>}
+          </>
+        )}
       </div>
       <p className="workspace-warning">Только прототип и синтетические данные.
         Статус оборудования в HRMS не управляет станком, роботом, защитными ограждениями

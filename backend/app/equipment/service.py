@@ -10,9 +10,10 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.competence.models import PersonSkillAssessment, Skill, SkillScaleLevel
 from app.credentials.models import CredentialType, PersonCredential
 from app.equipment.models import (
-    AssetCredentialRequirement, EquipmentAsset, EquipmentAuditEvent,
+    AssetCredentialRequirement, AssetSkillRequirement, EquipmentAsset, EquipmentAuditEvent,
     WorkEquipmentLink, WorkPermit,
 )
 from app.identity.models import UserAccount
@@ -102,6 +103,58 @@ def required_asset_credentials(
                 matches.add(valid[0].id)
     return problems, matches
 
+
+
+def required_asset_skills(
+    db: Session, order: WorkOrder, person: Person,
+) -> tuple[list[str], set[UUID]]:
+    """Check every asset policy against latest approved skill assessment.
+
+    The asset policy augments, and never replaces, WorkSkillRequirement.
+    An old higher rating cannot override a newer approved lower rating.
+    """
+    link = link_for(db, order.id)
+    if link is None:
+        return [], set()
+    asset = db.get(EquipmentAsset, link.asset_id)
+    if asset is None or asset.enterprise_id != order.enterprise_id:
+        return ["EQUIPMENT_MISSING"], set()
+    failures: list[str] = []
+    matches: set[UUID] = set()
+    for requirement in db.scalars(select(AssetSkillRequirement).where(
+        AssetSkillRequirement.enterprise_id == order.enterprise_id,
+        AssetSkillRequirement.asset_id == asset.id,
+    )).all():
+        skill = db.get(Skill, requirement.skill_id)
+        threshold = db.get(SkillScaleLevel, requirement.min_level_id)
+        if (
+            skill is None or not skill.is_active
+            or skill.enterprise_id != order.enterprise_id
+            or skill.scale_id != requirement.scale_id
+            or threshold is None or threshold.scale_id != requirement.scale_id
+        ):
+            failures.append("INVALID_EQUIPMENT_SKILL_POLICY")
+            continue
+        assessment = db.scalar(select(PersonSkillAssessment).where(
+            PersonSkillAssessment.enterprise_id == order.enterprise_id,
+            PersonSkillAssessment.person_id == person.id,
+            PersonSkillAssessment.skill_id == skill.id,
+            PersonSkillAssessment.status == "approved",
+        ).order_by(
+            PersonSkillAssessment.reviewed_at.desc(),
+            PersonSkillAssessment.id.desc(),
+        ).limit(1))
+        if assessment is None:
+            failures.append(f"EQUIPMENT_SKILL_UNVERIFIED:{skill.code}")
+            continue
+        rating = db.get(SkillScaleLevel, assessment.level_id)
+        if rating is None or rating.scale_id != requirement.scale_id:
+            failures.append(f"EQUIPMENT_SKILL_INVALID_RATING:{skill.code}")
+        elif rating.ordinal < threshold.ordinal:
+            failures.append(f"EQUIPMENT_SKILL_BELOW_MINIMUM:{skill.code}")
+        else:
+            matches.add(skill.id)
+    return failures, matches
 
 def audit(
     db: Session, actor: UserAccount, enterprise_id: UUID,
