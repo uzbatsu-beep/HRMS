@@ -19,7 +19,10 @@ from app.organization.models import Enterprise
 from app.personnel.models import Person, WorkforceResource
 from app.personnel.service import current_assignment
 from app.work.models import WorkAuditEvent, WorkCrewMember, WorkOrder, WorkSkillRequirement
-from app.work.schemas import Blocker, CandidateView, CrewMemberView, RequiredSkillView, WorkView, AssignmentView
+from app.work.schemas import (
+    AssignmentView, Blocker, CandidateView, CrewMemberView, RequiredSkillView,
+    WorkView,
+)
 from app.work.models import WorkOrderAssignment
 
 UTC = timezone.utc
