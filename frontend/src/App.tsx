@@ -11,6 +11,7 @@ import { useWorkspace } from "./WorkspaceContext";
 import WorkspaceSearch from "./WorkspaceSearch";
 import WorkspaceBreadcrumbs from "./WorkspaceBreadcrumbs";
 import DashboardPanel from "./DashboardPanel";
+import ConfiguratorPanel from "./ConfiguratorPanel";
 
 type ReadinessResponse = {
   status: string;
@@ -18,7 +19,7 @@ type ReadinessResponse = {
 };
 type ApiState = "checking" | "ready" | "unavailable";
 type Page = "dashboard" | "organization" | "personnel" | "competence"
-  | "credentials" | "availability" | "work" | "access" | "system";
+  | "credentials" | "availability" | "work" | "configuration" | "access" | "system";
 
 const navigation: { page: Page; icon: string; label: string; description: string }[] = [
   { page: "dashboard", icon: "⌂", label: "Обзор", description: "Рабочая панель" },
@@ -28,6 +29,7 @@ const navigation: { page: Page; icon: string; label: string; description: string
   { page: "credentials", icon: "▣", label: "Документы и допуски", description: "Сертификаты и проверка" },
   { page: "availability", icon: "▥", label: "Смены и загрузка", description: "Графики и занятость" },
   { page: "work", icon: "⚒", label: "Наряды и бригады", description: "Работы и исполнители" },
+  { page: "configuration", icon: "▧", label: "Конфигуратор", description: "Версии и согласование" },
   { page: "access", icon: "◇", label: "Пользователи", description: "Вход и права доступа" },
   { page: "system", icon: "⚙", label: "Система", description: "API и диагностика" },
 ];
@@ -159,6 +161,7 @@ export default function App() {
           {page === "credentials" && <CredentialsPanel />}
           {page === "availability" && <AvailabilityPanel />}
           {page === "work" && <WorkPanel />}
+          {page === "configuration" && <ConfiguratorPanel />}
           {page === "access" && <AuthPanel />}
           {page === "system" && (
             <section className="system-panel" aria-labelledby="system-title">
