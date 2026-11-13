@@ -25,6 +25,10 @@ function guard() {
     throw new Error("Refusing to seed: E2E_ALLOW_SEED=1 is required for disposable test DB.");
   if (url.protocol !== "http:" || !["127.0.0.1", "localhost"].includes(url.hostname))
     throw new Error("Seeding must target a local HTTP loopback URL.");
+  // Never seed the user's normal 5173 development instance. Only the isolated
+  // 5174 Compose fixture, or the dedicated loopback CI job, is permitted.
+  if (url.port !== "5174" && !(process.env.CI === "true" && url.port === "5173"))
+    throw new Error("Use the isolated E2E stack on port 5174; 5173 is CI-only.");
 }
 async function login(ctx: APIRequestContext, user: string, password: string) {
   const response = await ctx.post("/api/v1/auth/login", { data: { username: user, password } });
