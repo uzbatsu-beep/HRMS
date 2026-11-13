@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useWorkspace } from "./WorkspaceContext";
 import WorkExecutionPanel from "./WorkExecutionPanel";
 
 type User = { id: string; username: string; role: "admin" | "manager" | "viewer" };
@@ -100,7 +101,8 @@ export default function WorkPanel() {
   const [authVersion, setAuthVersion] = useState(0);
   const [revision, setRevision] = useState(0);
   const [enterprises, setEnterprises] = useState<Enterprise[]>([]);
-  const [enterpriseId, setEnterpriseId] = useState("");
+  const { enterpriseId, setEnterpriseId,
+    unitId: workspaceUnitId, setUnitId: setWorkspaceUnitId } = useWorkspace();
   const [units, setUnits] = useState<Unit[]>([]);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [scales, setScales] = useState<Scale[]>([]);
@@ -161,7 +163,7 @@ export default function WorkPanel() {
 
   useEffect(() => {
     if (!session) {
-      setEnterprises([]); setEnterpriseId(""); setOrders([]); setCandidates([]);
+      setEnterprises([]); setOrders([]); setCandidates([]);
       return;
     }
     let active = true;
@@ -177,6 +179,12 @@ export default function WorkPanel() {
       });
     return () => { active = false; };
   }, [session?.user.id, revision]);
+
+  useEffect(() => {
+    if (workspaceUnitId && units.some((unit) => unit.id === workspaceUnitId)) {
+      setUnitId(workspaceUnitId);
+    }
+  }, [workspaceUnitId, units]);
 
   useEffect(() => {
     if (!session || !enterpriseId) {
@@ -330,7 +338,10 @@ export default function WorkPanel() {
                     onChange={(e) => setTitle(e.target.value)} />
                 </label>
                 <label>Подразделение
-                  <select required value={unitId} onChange={(e) => setUnitId(e.target.value)}>
+                  <select required value={unitId} onChange={(e) => {
+                    setUnitId(e.target.value);
+                    setWorkspaceUnitId(e.target.value);
+                  }}>
                     <option value="">Выберите подразделение</option>
                     {units.map((unit) => (
                       <option key={unit.id} value={unit.id}>{unit.name}</option>
