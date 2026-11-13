@@ -206,9 +206,16 @@ def view_work(db: Session, work: WorkOrder) -> WorkView:
     return WorkView(
         id=work.id, enterprise_id=work.enterprise_id, unit_id=work.unit_id,
         code=work.code, title=work.title, description=work.description,
-        activity_code=work.activity_code, starts_at=work.starts_at,
-        ends_at=work.ends_at, status=work.status, created_at=work.created_at,
-        started_at=work.started_at, completed_at=work.completed_at,
-        cancelled_at=work.cancelled_at, required_skills=requirements,
-        assignment=AssignmentView.model_validate(assignment) if assignment else None,
+        activity_code=work.activity_code, starts_at=as_utc(work.starts_at),
+        ends_at=as_utc(work.ends_at), status=work.status,
+        created_at=as_utc(work.created_at),
+        started_at=as_utc(work.started_at) if work.started_at else None,
+        completed_at=as_utc(work.completed_at) if work.completed_at else None,
+        cancelled_at=as_utc(work.cancelled_at) if work.cancelled_at else None,
+        required_skills=requirements,
+        assignment=AssignmentView(
+            id=assignment.id, person_id=assignment.person_id,
+            resource_id=assignment.resource_id, reservation_id=assignment.reservation_id,
+            assigned_at=as_utc(assignment.assigned_at),
+        ) if assignment else None,
     )
