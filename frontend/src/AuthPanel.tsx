@@ -64,6 +64,7 @@ export default function AuthPanel() {
       setCsrf(data.csrf_token);
       setPassword("");
       setStatus("signed_in");
+      window.dispatchEvent(new Event("twm-auth-changed"));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Ошибка соединения с сервером.");
       setPassword("");

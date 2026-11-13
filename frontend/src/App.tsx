@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import AuthPanel from "./AuthPanel";
 import OrganizationPanel from "./OrganizationPanel";
@@ -7,34 +6,79 @@ import CompetencePanel from "./CompetencePanel";
 import CredentialsPanel from "./CredentialsPanel";
 import AvailabilityPanel from "./AvailabilityPanel";
 import WorkPanel from "./WorkPanel";
+import ContextRail, { type PersonFocus } from "./ContextRail";
 
 type ReadinessResponse = {
   status: string;
   dependencies: { database: string };
 };
-
+type Session = {
+  user: { id: string; username: string; role: "admin" | "manager" | "viewer" };
+  csrf_token: string;
+};
 type ApiState = "checking" | "ready" | "unavailable";
+type Page = "dashboard" | "organization" | "personnel" | "competence"
+  | "credentials" | "availability" | "work" | "access" | "system";
 
-const modules = [
-  { number: "01", title: "Organization", description: "Структура предприятия, службы, подразделения и бригады." },
-  { number: "02", title: "Personnel", description: "Профили технических специалистов и трудовые ресурсы." },
-  { number: "03", title: "Competence", description: "Компетенции, шкалы оценки и подтверждение навыков." },
-  { number: "04", title: "Credentials", description: "Квалификации, сертификаты и допуски." },
-  { number: "05", title: "Availability", description: "Смены, календари и загрузка специалистов." },
-  { number: "06", title: "Work Management", description: "Заявки, технические задания и назначение исполнителей." },
+const navigation: { page: Page; icon: string; label: string; description: string }[] = [
+  { page: "dashboard", icon: "⌂", label: "Обзор", description: "Рабочая панель" },
+  { page: "organization", icon: "▤", label: "Оргструктура", description: "Предприятия и службы" },
+  { page: "personnel", icon: "♙", label: "Персонал", description: "Карточки специалистов" },
+  { page: "competence", icon: "▦", label: "Компетенции", description: "Навыки и оценка" },
+  { page: "credentials", icon: "▣", label: "Документы и допуски", description: "Сертификаты и проверка" },
+  { page: "availability", icon: "▥", label: "Смены и загрузка", description: "Графики и занятость" },
+  { page: "work", icon: "⚒", label: "Наряды и бригады", description: "Работы и исполнители" },
+  { page: "access", icon: "◇", label: "Пользователи", description: "Вход и права доступа" },
+  { page: "system", icon: "⚙", label: "Система", description: "API и диагностика" },
 ];
 
+function pageFromHash(): Page {
+  const raw = window.location.hash.replace(/^#\/?/, "").split("?")[0];
+  if (raw === "home") return "dashboard";
+  const found = navigation.find((item) => item.page === raw);
+  return found?.page ?? "dashboard";
+}
+
 export default function App() {
+  const [page, setPage] = useState<Page>(pageFromHash);
+  const [session, setSession] = useState<Session | null>(null);
+  const [authRevision, setAuthRevision] = useState(0);
+  const [personFocus, setPersonFocus] = useState<PersonFocus | null>(null);
   const [apiState, setApiState] = useState<ApiState>("checking");
   const [databaseState, setDatabaseState] = useState("Проверка...");
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    const onHash = () => { setPage(pageFromHash()); setMenuOpen(false); };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
+  useEffect(() => {
+    const onAuth = () => setAuthRevision((old) => old + 1);
+    window.addEventListener("twm-auth-changed", onAuth);
+    return () => window.removeEventListener("twm-auth-changed", onAuth);
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
+    fetch("/api/v1/auth/me", {
+      credentials: "same-origin", signal: controller.signal,
+    }).then(async (response) => {
+      if (!response.ok) return null;
+      return await response.json() as Session;
+    }).then((data) => {
+      if (!controller.signal.aborted) setSession(data);
+    }).catch(() => { if (!controller.signal.aborted) setSession(null); });
+    return () => controller.abort();
+  }, [authRevision]);
 
+  useEffect(() => {
+    const controller = new AbortController();
     fetch("/api/v1/health/ready", { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error("API returned " + response.status);
-        return (await response.json()) as ReadinessResponse;
+        return await response.json() as ReadinessResponse;
       })
       .then((data) => {
         setApiState("ready");
@@ -45,10 +89,22 @@ export default function App() {
         setApiState("unavailable");
         setDatabaseState("Нет соединения");
       });
-
     return () => controller.abort();
   }, []);
 
+  function navigate(destination: string) {
+    const target = navigation.find((item) => item.page === destination)?.page ?? "dashboard";
+    window.location.hash = target;
+    setPage(target);
+    setMenuOpen(false);
+  }
+
+  function focusPerson(person: PersonFocus) {
+    setPersonFocus(person);
+    navigate("personnel");
+  }
+
+  const active = navigation.find((item) => item.page === page) ?? navigation[0];
   const statusText = {
     checking: "Проверяем сервисы",
     ready: "Сервисы доступны",
@@ -56,99 +112,147 @@ export default function App() {
   }[apiState];
 
   return (
-    <main className="shell">
-      <header className="topbar">
-        <a className="brand" href="#home" aria-label="TWM — главная">
-          <span className="brand-mark">T</span>
-          <span>
-            <strong>TWM</strong>
-            <small>TECHNICAL WORKFORCE MANAGEMENT</small>
-          </span>
-        </a>
-        <div className="topbar-meta">
+    <div className="workspace">
+      <header className="workspace-topbar">
+        <div className="workspace-brand-group">
+          <button type="button" className="workspace-mobile-toggle"
+            aria-label={menuOpen ? "Закрыть меню" : "Открыть меню"}
+            aria-expanded={menuOpen} onClick={() => setMenuOpen((value) => !value)}>☰</button>
+          <a className="brand" href="#dashboard" aria-label="TWM — обзор">
+            <span className="brand-mark">T</span>
+            <span><strong>TWM</strong><small>TECHNICAL WORKFORCE MANAGEMENT</small></span>
+          </a>
+          <span className="workspace-divider" aria-hidden="true" />
+          <span className="workspace-context">{active.label}</span>
+        </div>
+        <div className="workspace-top-meta">
           <span className="environment">DEVELOPMENT</span>
           <span className={"status-dot " + apiState} aria-hidden="true" />
           <span className="status-text" role="status">{statusText}</span>
+          <button className="workspace-user" type="button" onClick={() => navigate("access")}>
+            {session ? session.user.username : "Войти"}
+          </button>
         </div>
       </header>
 
-      <section className="hero" id="home">
-        <div className="eyebrow">PROJECT FOUNDATION · 0.1.0</div>
-        <h1>Управление техническими<br /><span>компетенциями и ресурсами</span></h1>
-        <p>
-          Единая рабочая среда для внутренних технических служб производственного предприятия:
-          от профиля специалиста и подтверждённых допусков до доступности и назначения работ.
-        </p>
-        <div className="hero-note">
-          <span className="note-icon">i</span>
-          <span>Это базовая версия приложения. Функциональные доменные модули будут подключаться последовательно.</span>
-        </div>
-      </section>
+      <div className="workspace-columns">
+        <aside className={`workspace-navigation ${menuOpen ? "open" : ""}`}
+          aria-label="Основная навигация">
+          <div className="nav-section-label">РАБОЧАЯ СРЕДА</div>
+          <nav className="workspace-nav">
+            {navigation.map((item) => (
+              <a href={`#${item.page}`} key={item.page}
+                className={`workspace-nav-item ${page === item.page ? "active" : ""}`}
+                aria-current={page === item.page ? "page" : undefined}
+                onClick={() => { setPage(item.page); setMenuOpen(false); }}>
+                <span className="workspace-nav-icon" aria-hidden="true">{item.icon}</span>
+                <span className="workspace-nav-label">
+                  <strong>{item.label}</strong>
+                  <small>{item.description}</small>
+                </span>
+              </a>
+            ))}
+          </nav>
+          <div className="nav-footer">
+            <span className="nav-footer-dot" />
+            <span>HRMS · развитие продукта</span>
+            <small>Модули PR #4–#11 подключены</small>
+          </div>
+        </aside>
 
-      <AuthPanel />
-      <OrganizationPanel />
-      <PersonnelPanel />
-      <CompetencePanel />
-      <CredentialsPanel />
-      <AvailabilityPanel />
-      <WorkPanel />
+        <main className="workspace-main" id="main-content">
+          <div className="workspace-page-heading">
+            <div>
+              <div className="eyebrow">TWM / {active.page.toUpperCase()}</div>
+              <h1>{active.label}</h1>
+              <p>{active.description}</p>
+            </div>
+          </div>
+          {page === "dashboard" && (
+            <>
+              <section className="dashboard-intro">
+                <div className="eyebrow">WORKFORCE OPERATIONS</div>
+                <h2>Управление техническими ресурсами предприятия</h2>
+                <p>Организационная структура, персонал, подтверждённые компетенции,
+                  производственные допуски, смены и технические работы — в одной среде.
+                  Для перехода к модулю используйте меню слева.</p>
+              </section>
+              {!session && (
+                <section className="workspace-info-card">
+                  <h2>Доступ к системе</h2>
+                  <p>Для работы со структурой предприятия и персоналом необходимо войти.</p>
+                  <button type="button" className="workspace-primary-action"
+                    onClick={() => navigate("access")}>Перейти к авторизации</button>
+                </section>
+              )}
+              <section className="dashboard-module-grid" aria-label="Доступные модули">
+                {navigation.filter((item) =>
+                  !["dashboard", "access", "system"].includes(item.page),
+                ).map((item) => (
+                  <button type="button" className="dashboard-module" key={item.page}
+                    onClick={() => navigate(item.page)}>
+                    <span className="workspace-nav-icon" aria-hidden="true">{item.icon}</span>
+                    <span><strong>{item.label}</strong><small>{item.description}</small></span>
+                    <span aria-hidden="true" className="dashboard-module-arrow">›</span>
+                  </button>
+                ))}
+              </section>
+              <p className="workspace-warning">
+                Среда предназначена для тестирования на синтетических данных.
+                Статус допуска в HRMS не является разрешением на опасные работы.
+              </p>
+            </>
+          )}
+          {page === "organization" && <OrganizationPanel />}
+          {page === "personnel" && <PersonnelPanel
+            contextEnterpriseId={personFocus?.enterpriseId}
+            focusedPersonId={personFocus?.personId}
+          />}
+          {page === "competence" && <CompetencePanel />}
+          {page === "credentials" && <CredentialsPanel />}
+          {page === "availability" && <AvailabilityPanel />}
+          {page === "work" && <WorkPanel />}
+          {page === "access" && <AuthPanel />}
+          {page === "system" && (
+            <section className="system-panel" aria-labelledby="system-title">
+              <div className="section-heading">
+                <div><div className="eyebrow">RUNTIME</div>
+                  <h2 id="system-title">Диагностика приложения</h2></div>
+                <span className={"state-pill " + apiState}>
+                  {apiState === "ready" ? "ONLINE" :
+                    apiState === "checking" ? "CHECKING" : "OFFLINE"}
+                </span>
+              </div>
+              <div className="runtime-grid">
+                <div className="runtime-item">
+                  <span className="runtime-label">REST API</span>
+                  <strong>{apiState === "ready" ? "Доступен" : statusText}</strong>
+                  <small>/api/v1/health/ready</small>
+                </div>
+                <div className="runtime-item">
+                  <span className="runtime-label">PostgreSQL</span>
+                  <strong>{databaseState}</strong><small>Проверка через SELECT 1</small>
+                </div>
+                <div className="runtime-item">
+                  <span className="runtime-label">API documentation</span>
+                  <strong><a href="http://localhost:8000/docs" target="_blank"
+                    rel="noreferrer">Swagger / OpenAPI ↗</a></strong>
+                  <small>FastAPI</small>
+                </div>
+              </div>
+              {apiState === "unavailable" && (
+                <p className="error-hint">Проверьте Docker Compose и миграции базы данных.</p>
+              )}
+            </section>
+          )}
+        </main>
 
-      <section className="system-panel" aria-labelledby="system-title">
-        <div className="section-heading">
-          <div>
-            <div className="eyebrow">RUNTIME</div>
-            <h2 id="system-title">Состояние системы</h2>
-          </div>
-          <span className={"state-pill " + apiState}>
-            {apiState === "ready" ? "ONLINE" : apiState === "checking" ? "CHECKING" : "OFFLINE"}
-          </span>
-        </div>
-        <div className="runtime-grid">
-          <div className="runtime-item">
-            <span className="runtime-label">REST API</span>
-            <strong>{apiState === "ready" ? "Доступен" : apiState === "checking" ? "Проверка" : "Недоступен"}</strong>
-            <small>/api/v1/health/ready</small>
-          </div>
-          <div className="runtime-item">
-            <span className="runtime-label">PostgreSQL</span>
-            <strong>{databaseState}</strong>
-            <small>Проверка через SELECT 1</small>
-          </div>
-          <div className="runtime-item">
-            <span className="runtime-label">API documentation</span>
-            <strong><a href="http://localhost:8000/docs" target="_blank" rel="noreferrer">Открыть Swagger ↗</a></strong>
-            <small>OpenAPI / FastAPI</small>
-          </div>
-        </div>
-        {apiState === "unavailable" && (
-          <p className="error-hint">Проверьте, что Docker Compose запущен и backend прошёл миграции базы данных.</p>
-        )}
-      </section>
-
-      <section className="modules-section" aria-labelledby="modules-title">
-        <div className="section-heading">
-          <div>
-            <div className="eyebrow">DOMAIN MAP</div>
-            <h2 id="modules-title">Функциональная архитектура</h2>
-          </div>
-          <span className="section-caption">Целевые домены платформы</span>
-        </div>
-        <div className="module-grid">
-          {modules.map((module) => (
-            <article className="module-card" key={module.number}>
-              <span className="module-number">{module.number}</span>
-              <h3>{module.title}</h3>
-              <p>{module.description}</p>
-              <span className="module-state">ЗАПЛАНИРОВАНО</span>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <footer className="footer">
-        <span>TWM · Technical Workforce Management</span>
-        <span>Foundation build · 0.1.0</span>
-      </footer>
-    </main>
+        <ContextRail
+          session={session}
+          onPersonSelect={focusPerson}
+          onNavigate={navigate}
+        />
+      </div>
+    </div>
   );
 }
