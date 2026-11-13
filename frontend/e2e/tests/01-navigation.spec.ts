@@ -12,7 +12,7 @@ test("guest has no access to personnel data; login updates topbar", async ({ pag
 
 test("left navigation and hash deep links show exactly one module", async ({ page }) => {
   await loginUI(page);
-  await page.getByRole("navigation", { name: "Основная навигация" })
+  await page.locator(".workspace-navigation")
     .getByRole("link", { name: /Документы и допуски/ }).click();
   await expect(page).toHaveURL(/#credentials$/);
   await expect(page.locator(".credentials-panel, #credentials").first()).toBeVisible();
@@ -37,7 +37,7 @@ test("mobile layout has operable navigation and real context below content", asy
   await expect(page).toHaveURL(/#personnel$/);
   await expect(page.locator(".workspace-navigation")).toBeHidden();
   await expect(page.locator(".workspace-rail")).toBeVisible();
-  await expect(page.locator("body")).not.toHaveJSProperty(
-    "scrollWidth", 5000,
-  );
+  await expect.poll(async () =>
+    page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 2),
+  ).toBeTruthy();
 });
