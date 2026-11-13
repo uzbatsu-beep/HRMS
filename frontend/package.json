@@ -8,7 +8,8 @@
     "check": "tsc --noEmit",
     "build": "tsc --noEmit && vite build",
     "test:e2e": "playwright test",
-    "test:e2e:headed": "playwright test --headed"
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:check": "tsc --project tsconfig.e2e.json --noEmit"
   },
   "dependencies": {
     "react": "^19.0.0",
