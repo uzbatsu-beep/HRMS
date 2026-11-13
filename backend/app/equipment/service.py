@@ -14,7 +14,8 @@ from app.competence.models import PersonSkillAssessment, Skill, SkillScaleLevel
 from app.availability.service import as_utc
 from app.credentials.models import CredentialType, PersonCredential
 from app.equipment.models import (
-    AssetCredentialRequirement, AssetSkillRequirement, AssetDowntimeWindow,
+    AssetCredentialRequirement, AssetSkillRequirement, AssetSkillPolicyRevision,
+    AssetDowntimeWindow,
     EquipmentAsset, EquipmentAuditEvent,
     WorkEquipmentLink, WorkPermit,
 )
@@ -139,6 +140,27 @@ def required_asset_credentials(
 
 
 
+
+def effective_skill_threshold(
+    db: Session, requirement: AssetSkillRequirement,
+) -> tuple[SkillScaleLevel | None, int]:
+    """Return last approved immutable version, or legacy/original baseline v1.
+
+    A missing newest revision's level fails closed in downstream enforcement
+    rather than silently falling back to an older/weaker threshold.
+    """
+    latest = db.scalar(select(AssetSkillPolicyRevision).where(
+        AssetSkillPolicyRevision.enterprise_id == requirement.enterprise_id,
+        AssetSkillPolicyRevision.requirement_id == requirement.id,
+    ).order_by(AssetSkillPolicyRevision.version.desc()).limit(1))
+    if latest is None:
+        return db.get(SkillScaleLevel, requirement.min_level_id), 1
+    level = db.get(SkillScaleLevel, latest.min_level_id)
+    if latest.scale_id != requirement.scale_id:
+        return None, latest.version
+    return level, latest.version
+
+
 def required_asset_skills(
     db: Session, order: WorkOrder, person: Person,
 ) -> tuple[list[str], set[UUID]]:
@@ -160,7 +182,7 @@ def required_asset_skills(
         AssetSkillRequirement.asset_id == asset.id,
     )).all():
         skill = db.get(Skill, requirement.skill_id)
-        threshold = db.get(SkillScaleLevel, requirement.min_level_id)
+        threshold, _version = effective_skill_threshold(db, requirement)
         if (
             skill is None or not skill.is_active
             or skill.enterprise_id != order.enterprise_id

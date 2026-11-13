@@ -44,6 +44,7 @@ class AssetSkillView(BaseModel):
     skill_name: str
     min_level_id: UUID
     min_ordinal: int
+    version: int
 
 
 class AssetView(BaseModel):
@@ -232,10 +233,11 @@ class EquipmentAuditPage(BaseModel):
 
 
 class PolicyProposalCreate(BaseModel):
-    kind: Literal["credential", "skill"]
+    kind: Literal["credential", "skill", "skill_upgrade"]
     credential_type_id: UUID | None = None
     skill_id: UUID | None = None
     min_level_id: UUID | None = None
+    expected_version: int | None = Field(default=None, ge=1)
     reason: str = Field(min_length=10, max_length=400)
 
     @field_validator("reason")
@@ -249,10 +251,15 @@ class PolicyProposalCreate(BaseModel):
     @model_validator(mode="after")
     def validate_policy_kind(self) -> "PolicyProposalCreate":
         if self.kind == "credential":
-            if self.credential_type_id is None or self.skill_id or self.min_level_id:
+            if (self.credential_type_id is None or self.skill_id or self.min_level_id
+                    or self.expected_version is not None):
                 raise ValueError("Credential proposals require only credential_type_id")
         elif self.skill_id is None or self.min_level_id is None or self.credential_type_id:
             raise ValueError("Skill proposals require skill_id and min_level_id")
+        elif self.kind == "skill_upgrade" and self.expected_version is None:
+            raise ValueError("Upgrades require expected_version")
+        elif self.kind == "skill" and self.expected_version is not None:
+            raise ValueError("New skills must not carry expected_version")
         return self
 
 
@@ -278,6 +285,7 @@ class PolicyProposalView(BaseModel):
     skill_id: UUID | None
     scale_id: UUID | None
     min_level_id: UUID | None
+    expected_version: int | None
     reason: str
     status: Literal["pending", "approved", "rejected"]
     proposed_by: UUID
@@ -285,3 +293,15 @@ class PolicyProposalView(BaseModel):
     reviewed_by: UUID | None
     reviewed_at: datetime | None
     review_note: str | None
+
+
+
+class SkillPolicyRevisionView(BaseModel):
+    requirement_id: UUID
+    skill_id: UUID
+    version: int
+    min_level_id: UUID
+    min_ordinal: int
+    approved_by: UUID
+    approved_at: datetime
+    proposal_id: UUID | None

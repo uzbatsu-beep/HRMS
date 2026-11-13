@@ -1064,3 +1064,10 @@ h2 { margin: 6px 0 0; font-size: 18px; letter-spacing: -.025em; }
   border-radius: 7px; padding: 11px; overflow-wrap: anywhere; }
 .equipment-policy-row small { font-size: 10px; color: #60726a; }
 .equipment-policy-review { display: flex; flex-wrap: wrap; gap: 8px; }
+
+
+/* PR #23: approved-only, immutable equipment skill policy versions */
+.equipment-policy-versions { display: grid; gap: 6px; max-height: 260px; overflow: auto; }
+.equipment-policy-versions > div { padding: 8px 10px; border: 1px solid var(--line);
+  border-radius: 6px; font-size: 11px; }
+.equipment-policy-versions small { color: #687a71; }
