@@ -121,7 +121,7 @@ def dashboard_summary(
         raise HTTPException(status_code=404, detail="Enterprise not found")
 
     permitted = allowed_unit_ids(db, user, enterprise_id)
-    if not permitted:
+    if not permitted and user.role != "admin":
         raise HTTPException(status_code=404, detail="Enterprise not found")
     if unit_id is not None and unit_id not in permitted:
         raise HTTPException(status_code=404, detail="Unit not found")
