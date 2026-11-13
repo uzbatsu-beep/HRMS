@@ -1014,3 +1014,16 @@ h2 { margin: 6px 0 0; font-size: 18px; letter-spacing: -.025em; }
 .equipment-readiness-item { display: grid; gap: 5px; padding: 12px; border: 1px solid var(--line); border-radius: 7px; }
 .equipment-readiness-item small { color: #697970; font-size: 11px; }
 .equipment-readiness-item .wm-warning { font-size: 11px; color: #a45d2d; }
+
+
+/* PR #19: equipment downtime planning and retained cancellation evidence */
+.equipment-downtime { display: grid; gap: 10px; margin: 16px 0; padding: 14px;
+  border: 1px solid var(--line); border-radius: 9px; }
+.equipment-downtime-editor summary { cursor: pointer; font-weight: 700; font-size: 12px; }
+.equipment-downtime-form { margin: 12px 0; display: grid; gap: 12px; }
+.equipment-downtime-list { display: grid; gap: 9px; max-height: 450px; overflow: auto; }
+.equipment-downtime-row { border: 1px solid var(--line); border-radius: 8px;
+  padding: 12px; display: grid; gap: 6px; }
+.equipment-downtime-row strong { font-size: 11px; }
+.equipment-downtime-row small { color: #6c7a74; font-size: 10px; }
+.equipment-downtime-cancel { display: grid; gap: 8px; }

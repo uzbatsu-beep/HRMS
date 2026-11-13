@@ -33,6 +33,7 @@ const labels: Record<string, string> = {
   EQUIPMENT_OUT_OF_SERVICE: "Оборудование выведено из эксплуатации",
   WORK_PERMIT_NOT_APPROVED: "Нет действующего согласованного разрешения",
   WORK_PERMIT_INCOMPLETE: "Неполные свидетельства проверки места работ",
+  EQUIPMENT_DOWNTIME_CONFLICT: "Оборудование запланировано на обслуживание в период наряда",
 };
 
 async function api<T>(url: string, csrf?: string, data?: object): Promise<T> {

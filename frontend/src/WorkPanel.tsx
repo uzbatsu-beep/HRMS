@@ -62,6 +62,7 @@ const readableCodes: Record<string, string> = {
   BOOKED: "Интервал уже занят",
   ABSENT: "Отсутствие пересекает интервал",
   CALENDAR_CLOSED: "Нерабочий день предприятия",
+  EQUIPMENT_DOWNTIME_CONFLICT: "Оборудование недоступно из-за обслуживания",
 };
 const localInput = (value: Date) => {
   const pad = (x: number) => String(x).padStart(2, "0");

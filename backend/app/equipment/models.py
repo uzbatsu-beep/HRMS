@@ -125,6 +125,43 @@ class AssetSkillRequirement(Base):
     )
 
 
+class AssetDowntimeWindow(Base):
+    """Scheduled equipment unavailability; cancellation preserves original history."""
+
+    __tablename__ = "asset_downtime_windows"
+    __table_args__ = (
+        UniqueConstraint("enterprise_id", "id", name="uq_downtime_tenant_id"),
+        ForeignKeyConstraint(
+            ["enterprise_id", "asset_id"],
+            ["equipment_assets.enterprise_id", "equipment_assets.id"],
+            name="fk_downtime_asset_tenant",
+        ),
+        CheckConstraint("ends_at > starts_at", name="ck_downtime_interval"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    enterprise_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("enterprises.id"), nullable=False
+    )
+    asset_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reason: Mapped[str] = mapped_column(String(400), nullable=False)
+    created_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("user_accounts.id"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancelled_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("user_accounts.id")
+    )
+    cancel_reason: Mapped[str | None] = mapped_column(String(400))
+
+
 class WorkEquipmentLink(Base):
     """One immutable target asset per work order in the v1 safety workflow."""
 

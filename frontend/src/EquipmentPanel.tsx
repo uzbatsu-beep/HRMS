@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useWorkspace } from "./WorkspaceContext";
+import EquipmentDowntimePanel from "./EquipmentDowntimePanel";
 
 type Asset = {
   id: string; enterprise_id: string; unit_id: string; code: string; name: string;
@@ -24,6 +25,7 @@ const blockerNames: Record<string, string> = {
   WORK_PERMIT_NOT_APPROVED: "Нет согласованного разрешения",
   WORK_PERMIT_INCOMPLETE: "Контрольный лист разрешения неполон",
   EQUIPMENT_MISSING: "Оборудование недоступно",
+  EQUIPMENT_DOWNTIME_CONFLICT: "Плановое обслуживание пересекается с работой",
 };
 
 async function api<T>(url: string, csrf?: string, method = "GET", data?: object): Promise<T> {
@@ -76,7 +78,7 @@ export default function EquipmentPanel() {
 
   useEffect(() => {
     setAssets([]); setTypes([]); setSkills([]); setScales([]);
-    setReadiness(null); setSelectedId(""); setError("");
+    setReadiness(null); setError("");
     if (!session || !enterpriseId) return;
     const controller = new AbortController();
     const root = "/api/v1/equipment/enterprises/" + enterpriseId;
@@ -233,6 +235,13 @@ export default function EquipmentPanel() {
               <p>Подразделение: {units.find(x => x.id === asset.unit_id)?.name ?? "—"}</p>
               <p>Состояние: <strong>{asset.status === "active"
                 ? "В эксплуатации" : "Выведено из эксплуатации"}</strong></p>
+              <EquipmentDowntimePanel
+                key={asset.id}
+                assetId={asset.id}
+                admin={Boolean(admin)}
+                csrfToken={csrf}
+                onChanged={() => setRev(x => x + 1)}
+              />
               <h4>Обязательные дополнительные допуски</h4>
               {asset.required_credential_type_ids.length ? (
                 <ul>

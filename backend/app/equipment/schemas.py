@@ -1,10 +1,10 @@
 """Read-only scope and constrained human-attestation API contracts."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 AssetKind = Literal["machine", "robot", "production_line", "other"]
 AssetStatus = Literal["active", "out_of_service"]
@@ -144,3 +144,52 @@ class EquipmentReadiness(BaseModel):
     blocked: int
     on_hold: int
     items: list[LinkedWorkReadiness]
+
+
+class DowntimeCreate(BaseModel):
+    starts_at: AwareDatetime
+    ends_at: AwareDatetime
+    reason: str = Field(min_length=10, max_length=400)
+
+    @field_validator("reason")
+    @classmethod
+    def trimmed_reason(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 10:
+            raise ValueError("At least ten nonspace characters required")
+        return value
+
+    @model_validator(mode="after")
+    def bounded_interval(self) -> "DowntimeCreate":
+        if self.ends_at <= self.starts_at:
+            raise ValueError("Downtime end must follow start")
+        if self.ends_at - self.starts_at > timedelta(days=14):
+            raise ValueError("A downtime window may not exceed 14 days")
+        return self
+
+
+class DowntimeCancel(BaseModel):
+    reason: str = Field(min_length=10, max_length=400)
+
+    @field_validator("reason")
+    @classmethod
+    def trimmed_reason(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 10:
+            raise ValueError("At least ten nonspace characters required")
+        return value
+
+
+class DowntimeView(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    enterprise_id: UUID
+    asset_id: UUID
+    starts_at: datetime
+    ends_at: datetime
+    reason: str
+    created_by: UUID
+    created_at: datetime
+    cancelled_at: datetime | None
+    cancelled_by: UUID | None
+    cancel_reason: str | None

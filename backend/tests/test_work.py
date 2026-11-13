@@ -1420,3 +1420,184 @@ def test_scoped_readiness_reports_only_asset_and_permit_software_gates(
     assert rows["total"] == 1
     auth(client)
     assert client.get(endpoint).json()["total"] == 2
+
+
+# PR #19 — planned equipment downtime, chronological gates and audit history.
+
+def schedule_downtime(
+    client: TestClient, asset: dict, start: datetime, end: datetime,
+    reason: str = "Synthetic planned maintenance window for robot",
+):
+    return client.post(
+        f"{EQUIPMENT}/assets/{asset['id']}/downtime",
+        headers=auth(client),
+        json={
+            "starts_at": start.isoformat(),
+            "ends_at": end.isoformat(),
+            "reason": reason,
+        },
+    )
+
+
+def cancel_downtime(client: TestClient, asset: dict, window_id: str):
+    return client.post(
+        f"{EQUIPMENT}/assets/{asset['id']}/downtime/{window_id}/cancel",
+        headers=auth(client),
+        json={"reason": "Maintenance was cancelled by authorized test engineer"},
+    )
+
+
+def test_downtime_blocks_matching_is_audited_and_cancelled_window_unblocks(
+    scenario: tuple[TestClient, Session],
+) -> None:
+    client, db = scenario
+    s = seed(client)
+    verified_skills(client, s)
+    verified_permit(client, s)
+    asset = add_test_asset(client, s, "maintenance-19")
+    work = create_work(client, s, "planned-maint-19")
+    link_test_asset(client, work, asset)
+    assert check_candidate(client, work, s["person"])["eligible"] is True
+    start = datetime.fromisoformat(work["starts_at"])
+    end = datetime.fromisoformat(work["ends_at"])
+
+    created = schedule_downtime(
+        client, asset, start + timedelta(minutes=10), end - timedelta(minutes=10)
+    )
+    assert created.status_code == 201, created.text
+    window = created.json()
+    assert window["cancelled_at"] is None
+    assert "EQUIPMENT_DOWNTIME_CONFLICT" in blockers(check_candidate(
+        client, work, s["person"]
+    ))
+    assert assign(client, work, s["person"]).status_code == 409
+
+    package = client.get(f"{EQUIPMENT}/orders/{work['id']}/safety-package").json()
+    assert "EQUIPMENT_DOWNTIME_CONFLICT" in package["equipment_blockers"]
+    readiness = client.get(
+        f"{EQUIPMENT}/enterprises/{s['enterprise']}/readiness"
+    ).json()
+    item = next(row for row in readiness["items"] if row["work_order_id"] == work["id"])
+    assert "EQUIPMENT_DOWNTIME_CONFLICT" in item["software_blockers"]
+
+    conflicting = schedule_downtime(
+        client, asset, start + timedelta(minutes=20), start + timedelta(minutes=30)
+    )
+    assert conflicting.status_code == 409
+    # Adjacent half-open interval is permitted even while first is active.
+    adjacent = schedule_downtime(
+        client, asset, end - timedelta(minutes=10), end + timedelta(minutes=15)
+    )
+    assert adjacent.status_code == 201, adjacent.text
+
+    cancelled = cancel_downtime(client, asset, window["id"])
+    assert cancelled.status_code == 200, cancelled.text
+    assert cancelled.json()["cancelled_at"] is not None
+    assert cancelled.json()["cancel_reason"]
+    # The adjacent window begins before job end; it is still a blocker.
+    assert "EQUIPMENT_DOWNTIME_CONFLICT" in blockers(check_candidate(
+        client, work, s["person"]
+    ))
+    assert cancel_downtime(client, asset, adjacent.json()["id"]).status_code == 200
+    assert check_candidate(client, work, s["person"])["eligible"] is True
+
+    history = client.get(f"{EQUIPMENT}/assets/{asset['id']}/downtime")
+    assert history.status_code == 200
+    assert len(history.json()) == 2
+    assert all(row["cancelled_at"] is not None for row in history.json())
+    from app.equipment.models import EquipmentAuditEvent
+    actions = {
+        row.action for row in db.scalars(select(EquipmentAuditEvent)).all()
+    }
+    assert {"asset.downtime_scheduled", "asset.downtime_cancelled"} <= actions
+
+
+def test_downtime_after_start_forces_hold_and_cancel_does_not_auto_resume(
+    scenario: tuple[TestClient, Session], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _db = scenario
+    s = seed(client)
+    verified_skills(client, s)
+    verified_permit(client, s)
+    asset = add_test_asset(client, s, "live-maintenance-19")
+    work = create_work(client, s, "active-maintenance-19")
+    link_test_asset(client, work, asset)
+    assert assign(client, work, s["person"]).status_code == 200
+    permit = prepare_test_permit(client, work)
+    assert permit_transition(client, work, permit, "submit").status_code == 200
+    assert permit_transition(client, work, permit, "approve", "wm-reviewer").status_code == 200
+    start = datetime.fromisoformat(work["starts_at"])
+    monkeypatch.setattr(work_service, "utcnow", lambda: start + timedelta(minutes=5))
+    assert client.post(f"{BASE}/orders/{work['id']}/start", headers=auth(client)
+                       ).status_code == 200
+
+    scheduled = schedule_downtime(
+        client, asset, start + timedelta(minutes=20), start + timedelta(minutes=40),
+    )
+    assert scheduled.status_code == 201, scheduled.text
+    assert client.get(f"{BASE}/orders/{work['id']}").json()["status"] == "on_hold"
+    rejected = client.post(
+        f"{BASE}/orders/{work['id']}/resume", headers=auth(client),
+        json={"reason": "Attempted resume before cancelling maintenance"},
+    )
+    assert rejected.status_code == 409
+    assert "EQUIPMENT_DOWNTIME_CONFLICT" in str(rejected.json())
+    cancelled = cancel_downtime(client, asset, scheduled.json()["id"])
+    assert cancelled.status_code == 200
+    assert client.get(f"{BASE}/orders/{work['id']}").json()["status"] == "on_hold"
+    resumed = client.post(
+        f"{BASE}/orders/{work['id']}/resume", headers=auth(client),
+        json={"reason": "Authorized human revalidation after cancellation"},
+    )
+    assert resumed.status_code == 200, resumed.text
+
+
+def test_downtime_policy_interval_validation_scope_and_csrf(
+    scenario: tuple[TestClient, Session],
+) -> None:
+    client, _db = scenario
+    s = seed(client)
+    asset = add_test_asset(client, s, "maintenance-auth-19")
+    start = datetime.fromisoformat(interval()[0])
+    end = start + timedelta(hours=1)
+    route = f"{EQUIPMENT}/assets/{asset['id']}/downtime"
+    valid = {
+        "starts_at": start.isoformat(), "ends_at": end.isoformat(),
+        "reason": "Scheduled synthetic maintenance of production equipment",
+    }
+    assert client.post(route, json=valid).status_code == 403
+    assert client.post(route, headers=auth(client, "wm-viewer"),
+                       json=valid).status_code == 403
+    assert client.post(route, headers=auth(client, "wm-manager"),
+                       json=valid).status_code == 403
+    assert client.post(
+        route, headers=auth(client),
+        json={**valid, "ends_at": start.isoformat()},
+    ).status_code == 422
+    assert client.post(
+        route, headers=auth(client),
+        json={**valid, "ends_at": (start + timedelta(days=15)).isoformat()},
+    ).status_code == 422
+    assert client.post(
+        route, headers=auth(client),
+        json={**valid, "reason": "  "},
+    ).status_code == 422
+    created = client.post(route, headers=auth(client), json=valid)
+    assert created.status_code == 201, created.text
+    assert client.post(
+        route + "/" + created.json()["id"] + "/cancel", json={
+            "reason": "Synthetic cancellation requested by maintenance planner",
+        }
+    ).status_code == 403
+    assert client.post(
+        route + "/" + created.json()["id"] + "/cancel",
+        headers=auth(client, "wm-viewer"),
+        json={"reason": "Synthetic cancellation requested by maintenance planner"},
+    ).status_code == 403
+    auth(client, "wm-viewer")
+    assert client.get(route).status_code == 404
+    auth(client)
+    assert client.get(route).status_code == 200
+    cancelled = cancel_downtime(client, asset, created.json()["id"])
+    assert cancelled.status_code == 200
+    assert cancel_downtime(client, asset, created.json()["id"]).status_code == 409

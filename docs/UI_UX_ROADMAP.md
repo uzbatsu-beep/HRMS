@@ -163,3 +163,15 @@ interlock or a legal work authorization. See ADR-0014.
 Remaining: scheduled rechecks, qualified independent policy approval,
 operational asset inspection evidence, immutable site PTW certificates and
 system-level safety integration with certified external processes.
+
+
+### PR #19 — Equipment Planned Downtime & Scheduling Gates (in review)
+
+A tenant-scoped equipment maintenance calendar records bounded non-overlapping
+windows with auditable cancellation history. A newly scheduled overlap with an
+in-progress linked work order moves it into an application-only on_hold state;
+no physical machine stop is claimed. Candidate matching and the work lifecycle
+both deny overlap with [work starts_at, ends_at), and site authorization remains
+external to HRMS. Cancelled maintenance windows stop blocking but never
+automatically resume work. An operator must explicitly revalidate. Refer to
+docs/adr/0015-equipment-downtime.md.
