@@ -32,6 +32,20 @@ class AssetStateChange(BaseModel):
         return value
 
 
+class AssetSkillCreate(BaseModel):
+    skill_id: UUID
+    min_level_id: UUID
+
+
+class AssetSkillView(BaseModel):
+    id: UUID
+    skill_id: UUID
+    skill_code: str
+    skill_name: str
+    min_level_id: UUID
+    min_ordinal: int
+
+
 class AssetView(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: UUID
@@ -43,6 +57,7 @@ class AssetView(BaseModel):
     serial_number: str | None
     status: AssetStatus
     required_credential_type_ids: list[UUID]
+    required_skills: list[AssetSkillView]
 
 
 class AssetCredentialCreate(BaseModel):
@@ -106,3 +121,26 @@ class SafetyPackage(BaseModel):
     asset: AssetView | None
     permit: PermitView | None
     equipment_blockers: list[str]
+
+
+class LinkedWorkReadiness(BaseModel):
+    work_order_id: UUID
+    work_code: str
+    title: str
+    unit_id: UUID
+    asset_id: UUID
+    asset_code: str
+    status: str
+    permit_version: int | None
+    permit_status: str | None
+    software_blockers: list[str]
+    crew_eligibility_checked: bool = False
+
+
+class EquipmentReadiness(BaseModel):
+    enterprise_id: UUID
+    unit_id: UUID | None
+    total: int
+    blocked: int
+    on_hold: int
+    items: list[LinkedWorkReadiness]

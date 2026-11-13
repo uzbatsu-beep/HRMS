@@ -1005,3 +1005,12 @@ h2 { margin: 6px 0 0; font-size: 18px; letter-spacing: -.025em; }
   .equipment-layout, .equipment-editor form { grid-template-columns: 1fr; }
   .equipment-heading { flex-direction: column; }
 }
+
+/* PR #18: equipment-specific skill policy and read-only readiness */
+
+.equipment-readiness { border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 9px; }
+.equipment-readiness-kpis { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; }
+.equipment-readiness-kpis strong { padding: 10px 12px; border-radius: 7px; background: #edf5f1; }
+.equipment-readiness-item { display: grid; gap: 5px; padding: 12px; border: 1px solid var(--line); border-radius: 7px; }
+.equipment-readiness-item small { color: #697970; font-size: 11px; }
+.equipment-readiness-item .wm-warning { font-size: 11px; color: #a45d2d; }

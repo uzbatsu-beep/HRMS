@@ -86,6 +86,45 @@ class AssetCredentialRequirement(Base):
     )
 
 
+class AssetSkillRequirement(Base):
+    """Append-only mandatory skill threshold for every person working on an asset."""
+
+    __tablename__ = "asset_skill_requirements"
+    __table_args__ = (
+        UniqueConstraint("asset_id", "skill_id", name="uq_asset_required_skill"),
+        ForeignKeyConstraint(
+            ["enterprise_id", "asset_id"],
+            ["equipment_assets.enterprise_id", "equipment_assets.id"],
+            name="fk_asset_skill_asset_tenant",
+        ),
+        ForeignKeyConstraint(
+            ["enterprise_id", "skill_id", "scale_id"],
+            ["skills.enterprise_id", "skills.id", "skills.scale_id"],
+            name="fk_asset_skill_tenant_scale",
+        ),
+        ForeignKeyConstraint(
+            ["scale_id", "min_level_id"],
+            ["skill_scale_levels.scale_id", "skill_scale_levels.id"],
+            name="fk_asset_skill_min_level_scale",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    enterprise_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("enterprises.id"), nullable=False
+    )
+    asset_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    skill_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    scale_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    min_level_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    added_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("user_accounts.id"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class WorkEquipmentLink(Base):
     """One immutable target asset per work order in the v1 safety workflow."""
 

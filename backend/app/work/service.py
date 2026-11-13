@@ -14,7 +14,7 @@ from app.availability.models import ShiftRule
 from app.availability.service import as_utc, evaluate
 from app.competence.models import PersonSkillAssessment, Skill, SkillScaleLevel
 from app.credentials.service import evaluate_activity
-from app.equipment.service import required_asset_credentials
+from app.equipment.service import required_asset_credentials, required_asset_skills
 from app.identity.models import UserAccount
 from app.organization.models import Enterprise
 from app.personnel.models import Person, WorkforceResource
@@ -156,6 +156,15 @@ def assess_candidate(
             )
         else:
             verified_skills.append(skill.id)
+
+    if person.enterprise_id == work.enterprise_id:
+        # Asset-level approved skills are additive to fixed work-order skills.
+        asset_skill_failures, asset_skills = required_asset_skills(db, work, person)
+        for issue in asset_skill_failures:
+            block("skill", issue.split(":")[0], issue)
+        for skill_id in asset_skills:
+            if skill_id not in verified_skills:
+                verified_skills.append(skill_id)
 
     if person.enterprise_id == work.enterprise_id:
         # Independent mandatory credential policy is enforced on all relevant

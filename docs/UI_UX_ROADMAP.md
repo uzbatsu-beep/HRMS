@@ -147,3 +147,19 @@ Open `http://localhost:5173/#dashboard`.
 The backend is unchanged in PR #12. Use only synthetic personnel/credentials
 while validating. The production-like operational workflow does not itself
 authorize hazardous work.
+
+### PR #18 — Equipment Skill Gates & Software Readiness (in review)
+
+Append-only machine-specific skill thresholds are enforced in addition to each
+work order's existing approved skill requirements and safety credentials. The
+latest approved assessment governs, and late policy additions move affected
+running work to an audited HRMS hold.
+
+An RBAC-filtered equipment-linked work overview shows permit/asset **software**
+blockers and hold counts in the Equipment module. This is explicitly NOT an
+examination of crew eligibility, a certified safety assessment, physical
+interlock or a legal work authorization. See ADR-0014.
+
+Remaining: scheduled rechecks, qualified independent policy approval,
+operational asset inspection evidence, immutable site PTW certificates and
+system-level safety integration with certified external processes.

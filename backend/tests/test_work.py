@@ -1239,3 +1239,186 @@ def test_new_asset_requirement_places_active_work_on_software_hold(
         headers=auth(client),
         json={"reason": "Synthetic follow-up credential now independently verified"},
     ).status_code == 200
+
+
+# PR #18 — equipment-specific approved skills and scoped software readiness.
+
+def add_equipment_skill(
+    client: TestClient, asset: dict, skill_id: str, minimum_id: str,
+):
+    return client.post(
+        f"{EQUIPMENT}/assets/{asset['id']}/required-skills",
+        headers=auth(client),
+        json={"skill_id": skill_id, "min_level_id": minimum_id},
+    )
+
+
+def test_asset_skill_threshold_is_additive_latest_approved_and_not_downgradable(
+    scenario: tuple[TestClient, Session],
+) -> None:
+    client, _db = scenario
+    s = seed(client)
+    asset = add_test_asset(client, s, "machine-skill-18")
+    result = add_equipment_skill(client, asset, s["skill"], s["level_high"])
+    assert result.status_code == 201, result.text
+    assert result.json()["required_skills"][0]["min_ordinal"] == 3
+    assert add_equipment_skill(client, asset, s["skill"], s["level_low"]).status_code == 409
+    verified_skills(client, s, s["level_low"])
+    verified_permit(client, s)
+    work = create_work(client, s, "machine-threshold-18")
+    link_test_asset(client, work, asset)
+    candidate = check_candidate(client, work, s["person"])
+    assert "EQUIPMENT_SKILL_BELOW_MINIMUM" in blockers(candidate)
+    assert "INSUFFICIENT_SKILL_LEVEL" not in blockers(candidate)
+    assert assign(client, work, s["person"]).status_code == 409
+
+    verified_skills(client, s, s["level_high"])
+    candidate = check_candidate(client, work, s["person"])
+    assert candidate["eligible"] is True
+    assert s["skill"] in candidate["verified_skills"]
+    verified_skills(client, s, s["level_low"])
+    candidate = check_candidate(client, work, s["person"])
+    assert "EQUIPMENT_SKILL_BELOW_MINIMUM" in blockers(candidate)
+
+
+def test_asset_skill_write_rejects_bad_scale_roles_and_scope(
+    scenario: tuple[TestClient, Session],
+) -> None:
+    client, _db = scenario
+    s = seed(client)
+    asset = add_test_asset(client, s, "machine-skills-rbac-18")
+    invalid = client.post(
+        f"{EQUIPMENT}/assets/{asset['id']}/required-skills",
+        headers=auth(client),
+        json={"skill_id": s["skill"], "min_level_id": s["foreign_person"]},
+    )
+    assert invalid.status_code == 422
+    assert client.post(
+        f"{EQUIPMENT}/assets/{asset['id']}/required-skills",
+        json={"skill_id": s["skill"], "min_level_id": s["level_high"]},
+    ).status_code == 403
+    assert client.post(
+        f"{EQUIPMENT}/assets/{asset['id']}/required-skills",
+        headers=auth(client, "wm-viewer"),
+        json={"skill_id": s["skill"], "min_level_id": s["level_high"]},
+    ).status_code == 403
+    assert client.post(
+        f"{EQUIPMENT}/assets/{asset['id']}/required-skills",
+        headers=auth(client, "wm-manager"),
+        json={"skill_id": s["skill"], "min_level_id": s["level_high"]},
+    ).status_code == 403
+    assert add_equipment_skill(client, asset, s["skill"], s["level_high"]).status_code == 201
+    assert client.get(
+        f"{EQUIPMENT}/enterprises/{s['enterprise']}/assets",
+    ).json()[0]["required_skills"][0]["skill_id"] == s["skill"]
+
+
+def test_adding_asset_skill_during_running_work_forces_hold_and_rechecks(
+    scenario: tuple[TestClient, Session], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _db = scenario
+    s = seed(client)
+    verified_skills(client, s)
+    verified_permit(client, s)
+    asset = add_test_asset(client, s, "machine-late-skill-18")
+    work = create_work(client, s, "work-late-skill-18")
+    link_test_asset(client, work, asset)
+    assert assign(client, work, s["person"]).status_code == 200
+    permit = prepare_test_permit(client, work)
+    assert permit_transition(client, work, permit, "submit").status_code == 200
+    assert permit_transition(client, work, permit, "approve", "wm-reviewer").status_code == 200
+    planned = datetime.fromisoformat(work["starts_at"])
+    monkeypatch.setattr(work_service, "utcnow", lambda: planned + timedelta(minutes=5))
+    started = client.post(f"{BASE}/orders/{work['id']}/start", headers=auth(client))
+    assert started.status_code == 200, started.text
+
+    category = client.get(
+        f"/api/v1/competence/enterprises/{s['enterprise']}/categories",
+    ).json()[0]["id"]
+    scale = client.get(
+        f"/api/v1/competence/enterprises/{s['enterprise']}/scales",
+    ).json()[0]
+    extra = post(client, f"/api/v1/competence/enterprises/{s['enterprise']}/skills", {
+        "code": "robot-teach-18", "name": "Robot teaching test",
+        "category_id": category, "scale_id": scale["id"],
+    })
+    added = add_equipment_skill(client, asset, extra["id"], s["level_high"])
+    assert added.status_code == 201, added.text
+    assert client.get(f"{BASE}/orders/{work['id']}").json()["status"] == "on_hold"
+    fail = client.post(
+        f"{BASE}/orders/{work['id']}/resume",
+        headers=auth(client),
+        json={"reason": "New machine teaching qualification has not yet been verified"},
+    )
+    assert fail.status_code == 409
+    assert "EQUIPMENT_SKILL_UNVERIFIED" in str(fail.json())
+    proposal = post(
+        client, f"/api/v1/competence/persons/{s['person']}/expert-assessments", {
+            "skill_id": extra["id"], "level_id": s["level_high"],
+            "evidence": [{"kind": "observation",
+                          "description": "Synthetic robot teach session verified"}],
+        },
+    )
+    assert client.post(
+        f"/api/v1/competence/assessments/{proposal['id']}/review",
+        headers=auth(client, "wm-reviewer"),
+        json={"decision": "approved", "note": "Reviewed synthetic machine teaching skill"},
+    ).status_code == 200
+    resumed = client.post(
+        f"{BASE}/orders/{work['id']}/resume", headers=auth(client),
+        json={"reason": "New asset qualification independently confirmed in system"},
+    )
+    assert resumed.status_code == 200, resumed.text
+
+
+def test_scoped_readiness_reports_only_asset_and_permit_software_gates(
+    scenario: tuple[TestClient, Session],
+) -> None:
+    client, db = scenario
+    s = seed(client)
+    asset = add_test_asset(client, s, "readiness-asset-18")
+    work = create_work(client, s, "readiness-job-18")
+    link_test_asset(client, work, asset)
+    endpoint = f"{EQUIPMENT}/enterprises/{s['enterprise']}/readiness"
+    result = client.get(endpoint)
+    assert result.status_code == 200, result.text
+    report = result.json()
+    assert report["total"] == 1 and report["blocked"] == 1
+    assert report["on_hold"] == 0
+    assert report["items"][0]["software_blockers"] == ["WORK_PERMIT_NOT_APPROVED"]
+    assert report["items"][0]["crew_eligibility_checked"] is False
+    assert client.get(
+        endpoint, params={"unit_id": s["foreign_person"]},
+    ).status_code == 404
+
+    manager = next(x for x in client.get("/api/v1/auth/users").json()
+                   if x["username"] == "wm-manager")
+    post(client, "/api/v1/org/scopes", {
+        "user_id": manager["id"], "unit_id": s["unit"],
+        "include_descendants": False,
+    })
+    auth(client, "wm-manager")
+    report = client.get(endpoint)
+    assert report.status_code == 200
+    assert report.json()["total"] == 1
+    assert client.get(
+        endpoint, params={"unit_id": s["other_unit"]},
+    ).status_code == 404
+    auth(client, "wm-viewer")
+    assert client.get(endpoint).status_code == 404
+    auth(client)
+    foreign_asset = add_test_asset(client, s, "readiness-hidden-18")
+    # Move the newly created asset to a different unit in a synthetic DB
+    # transaction, preserving the same enterprise and auditable work link.
+    from app.equipment.models import EquipmentAsset
+    target = db.get(EquipmentAsset, UUID(foreign_asset["id"]))
+    assert target is not None
+    target.unit_id = UUID(s["other_unit"])
+    db.commit()
+    other_work = create_work(client, s, "readiness-other-unit-18")
+    link_test_asset(client, other_work, foreign_asset)
+    auth(client, "wm-manager")
+    rows = client.get(endpoint).json()
+    assert rows["total"] == 1
+    auth(client)
+    assert client.get(endpoint).json()["total"] == 2

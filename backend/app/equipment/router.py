@@ -11,15 +11,17 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.competence.models import Skill, SkillScaleLevel
 from app.credentials.models import CredentialType
 from app.database import get_db
 from app.equipment import service
 from app.equipment.models import (
-    AssetCredentialRequirement, EquipmentAsset, EquipmentAuditEvent,
+    AssetCredentialRequirement, AssetSkillRequirement, EquipmentAsset, EquipmentAuditEvent,
     WorkEquipmentLink, WorkPermit,
 )
 from app.equipment.schemas import (
-    AssetCreate, AssetCredentialCreate, AssetStateChange, AssetView,
+    AssetCreate, AssetCredentialCreate, AssetSkillCreate, AssetSkillView,
+    AssetStateChange, AssetView, EquipmentReadiness, LinkedWorkReadiness,
     EquipmentLinkCreate, PermitDraft, PermitReason, PermitView, SafetyPackage,
 )
 from app.identity.models import UserAccount
@@ -53,11 +55,26 @@ def asset_view(db: Session, item: EquipmentAsset) -> AssetView:
         AssetCredentialRequirement.enterprise_id == item.enterprise_id,
         AssetCredentialRequirement.asset_id == item.id,
     ).order_by(AssetCredentialRequirement.type_id)).all()
+    skill_requirements = db.scalars(select(AssetSkillRequirement).where(
+        AssetSkillRequirement.enterprise_id == item.enterprise_id,
+        AssetSkillRequirement.asset_id == item.id,
+    ).order_by(AssetSkillRequirement.skill_id)).all()
+    skills: list[AssetSkillView] = []
+    for requirement in skill_requirements:
+        skill = db.get(Skill, requirement.skill_id)
+        minimum = db.get(SkillScaleLevel, requirement.min_level_id)
+        skills.append(AssetSkillView(
+            id=requirement.id, skill_id=requirement.skill_id,
+            skill_code=skill.code if skill else "missing",
+            skill_name=skill.name if skill else "Missing or archived skill",
+            min_level_id=requirement.min_level_id,
+            min_ordinal=minimum.ordinal if minimum else -1,
+        ))
     return AssetView(
         id=item.id, enterprise_id=item.enterprise_id, unit_id=item.unit_id,
         code=item.code, name=item.name, kind=item.kind,
         serial_number=item.serial_number, status=item.status,
-        required_credential_type_ids=list(ids),
+        required_credential_type_ids=list(ids), required_skills=skills,
     )
 
 
@@ -232,6 +249,55 @@ def require_asset_credential(
             )
     service.audit(db, admin, asset.enterprise_id, "asset.credential_required", asset.id, {
         "type_id": str(kind.id),
+    })
+    work_service.commit_safe(db)
+    return asset_view(db, asset)
+
+
+@router.post(
+    "/assets/{asset_id}/required-skills",
+    status_code=status.HTTP_201_CREATED, response_model=AssetView,
+    dependencies=[Depends(require_csrf)],
+)
+def require_asset_skill(
+    asset_id: UUID, payload: AssetSkillCreate,
+    admin: UserAccount = Depends(require_admin),  # noqa: B008
+    db: Session = Depends(get_db),  # noqa: B008
+) -> AssetView:
+    asset = get_asset(db, admin, asset_id)
+    work_service.lock_enterprise(db, asset.enterprise_id)
+    skill = db.get(Skill, payload.skill_id)
+    threshold = db.get(SkillScaleLevel, payload.min_level_id)
+    if (
+        skill is None or not skill.is_active or skill.enterprise_id != asset.enterprise_id
+        or threshold is None or threshold.scale_id != skill.scale_id
+    ):
+        raise HTTPException(status_code=422, detail="Foreign, inactive or mismatched skill")
+    existing = db.scalar(select(AssetSkillRequirement).where(
+        AssetSkillRequirement.asset_id == asset.id,
+        AssetSkillRequirement.skill_id == skill.id,
+    ))
+    if existing is not None:
+        raise HTTPException(status_code=409, detail="Asset skill already required")
+    db.add(AssetSkillRequirement(
+        enterprise_id=asset.enterprise_id, asset_id=asset.id,
+        skill_id=skill.id, scale_id=skill.scale_id,
+        min_level_id=threshold.id, added_by=admin.id,
+    ))
+    # Stricter requirements cannot silently leave an active task running.
+    links = db.scalars(select(WorkEquipmentLink).where(
+        WorkEquipmentLink.enterprise_id == asset.enterprise_id,
+        WorkEquipmentLink.asset_id == asset.id,
+    )).all()
+    for link in links:
+        order = db.get(WorkOrder, link.work_order_id)
+        if order is not None and order.status == "in_progress":
+            hold_active_work(
+                db, order, admin, "Equipment skill policy changed during work"
+            )
+    service.audit(db, admin, asset.enterprise_id, "asset.skill_required", asset.id, {
+        "skill_id": str(skill.id), "min_level_id": str(threshold.id),
+        "min_ordinal": threshold.ordinal,
     })
     work_service.commit_safe(db)
     return asset_view(db, asset)
@@ -414,6 +480,59 @@ def revoke_permit(
     })
     work_service.commit_safe(db)
     return permit_view(row)
+
+
+@router.get(
+    "/enterprises/{enterprise_id}/readiness", response_model=EquipmentReadiness,
+)
+def equipment_readiness(
+    enterprise_id: UUID, unit_id: UUID | None = None,
+    user: UserAccount = Depends(get_current_user),  # noqa: B008
+    db: Session = Depends(get_db),  # noqa: B008
+) -> EquipmentReadiness:
+    """Current permit/asset software blockers only, not personal safety clearance."""
+    if db.get(Enterprise, enterprise_id) is None:
+        raise HTTPException(status_code=404, detail="Enterprise not found")
+    permitted = allowed_unit_ids(db, user, enterprise_id)
+    if user.role != "admin" and not permitted:
+        raise HTTPException(status_code=404, detail="Enterprise not found")
+    if unit_id is not None and unit_id not in permitted:
+        raise HTTPException(status_code=404, detail="Unit not found")
+    scope = {unit_id} if unit_id is not None else permitted
+    rows = db.execute(
+        select(WorkOrder, WorkEquipmentLink, EquipmentAsset)
+        .join(WorkEquipmentLink, WorkEquipmentLink.work_order_id == WorkOrder.id)
+        .join(EquipmentAsset, EquipmentAsset.id == WorkEquipmentLink.asset_id)
+        .where(
+            WorkOrder.enterprise_id == enterprise_id,
+            WorkOrder.unit_id.in_(scope),
+            EquipmentAsset.enterprise_id == enterprise_id,
+            EquipmentAsset.unit_id.in_(permitted),
+            WorkOrder.status.in_(("open", "assigned", "in_progress", "on_hold")),
+        )
+        .order_by(WorkOrder.created_at.desc(), WorkOrder.id.desc())
+        .limit(200)
+    ).all()
+    items: list[LinkedWorkReadiness] = []
+    for work, link, asset in rows:
+        permit = service.latest_permit(db, work.id)
+        reasons = service.equipment_problems(db, work)
+        items.append(LinkedWorkReadiness(
+            work_order_id=work.id, work_code=work.code,
+            title=work.title, unit_id=work.unit_id,
+            asset_id=link.asset_id, asset_code=asset.code,
+            status=work.status, permit_version=permit.version if permit else None,
+            permit_status=permit.status if permit else None,
+            software_blockers=reasons,
+            crew_eligibility_checked=False,
+        ))
+    return EquipmentReadiness(
+        enterprise_id=enterprise_id, unit_id=unit_id,
+        total=len(items),
+        blocked=sum(bool(item.software_blockers) for item in items),
+        on_hold=sum(item.status == "on_hold" for item in items),
+        items=items,
+    )
 
 
 @router.get("/enterprises/{enterprise_id}/audit", response_model=list[dict])
