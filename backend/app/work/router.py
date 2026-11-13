@@ -16,7 +16,7 @@ from app.identity.security import get_current_user, require_admin, require_csrf
 from app.organization.access import allowed_unit_ids
 from app.organization.models import Enterprise, OrganizationUnit
 from app.personnel.models import EmploymentAssignment, Person, WorkforceResource
-from app.personnel.service import require_visible_person
+from app.personnel.service import require_visible_person, visible_person
 from app.work import service as work_service
 from app.work.models import WorkAuditEvent, WorkOrder, WorkOrderAssignment, WorkSkillRequirement
 from app.work.schemas import (
@@ -158,6 +158,9 @@ def list_candidates(
         .order_by(Person.last_name, Person.first_name, Person.id)
         .limit(100)
     ).all()
+    if user.role != "admin":
+        # A future assignment must not reveal a currently out-of-scope Person.
+        people = [person for person in people if visible_person(db, user, person)]
     result = [work_service.assess_candidate(db, order, person) for person in people]
     return sorted(result, key=lambda item: (not item.eligible, item.full_name))
 
