@@ -359,6 +359,7 @@ def set_person_fields(
     revision = PersonFieldRevision(
         enterprise_id=person.enterprise_id, person_id=person.id,
         config_version_id=active.id, values_json=checked, changed_by=admin.id,
+        created_at=datetime.now(UTC),
     )
     db.add(revision)
     db.flush()
