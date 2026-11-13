@@ -73,12 +73,19 @@ filters, full Person summary cards, cursor-based searches/pagination beyond
 current endpoint limits, subtree (vs. direct department) filters and advanced
 keyboard navigation. The hash-based routes continue to be sufficient.
 
-### PR #15 — Operational dashboard & analytics
+### PR #15 — Operational dashboard & analytics (implementation in review)
 
-Provide a first workbench with current workforce availability, active work
-orders, credentials due for renewal, resource workload, unresolved safety
-holds and trends. Every metric must have backend-authoritative definitions.
-No invented utilization percentages or made-up availability calculations.
+Operational dashboard for all authenticated roles with organizational RBAC.
+The first version uses a fixed 30-calendar-day UTC trend window and 30-day
+credential renewal horizon. Availability means reservable for the next 15
+minutes (shift, closures, absences, active reservations); it is not a physical
+presence or a legal/safety authorization claim. Reservations are reported as
+hours, not a guessed utilization percentage. Metrics, limits and API semantics:
+`docs/adr/0011-operational-analytics.md`.
+
+Acceptance: scoped cross-enterprise/unit reads, empty/zero cases, inactive
+resources, expiry boundaries, cancelled bookings, dashboard navigation, account
+switching and CI checks. Do not mark complete before test evidence.
 
 ### PR #16 — Configurator and governed workflow
 
