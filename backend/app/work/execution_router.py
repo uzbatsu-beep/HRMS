@@ -19,7 +19,7 @@ from app.work import execution, service as work_service
 from app.work.models import WorkCrewMember, WorkOrder, WorkOrderAssignment
 from app.work.router import read_order, require_dispatcher
 from app.work.schemas import (
-    CrewCreate, CrewMemberView, LeadReplacement, PriorityChange, ReasonNote,
+    CrewCreate, LeadReplacement, PriorityChange, ReasonNote,
     SafetyCheck, WorkView,
 )
 
