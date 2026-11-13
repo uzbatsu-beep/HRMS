@@ -8,7 +8,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     Boolean, CheckConstraint, DateTime, ForeignKey, ForeignKeyConstraint,
-    Integer, String, Text, UniqueConstraint, func,
+    Index, Integer, String, Text, UniqueConstraint, func, text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -123,6 +123,91 @@ class AssetSkillRequirement(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+
+
+class AssetPolicyProposal(Base):
+    """Governed additive policy request: only independent approval activates a rule."""
+
+    __tablename__ = "asset_policy_proposals"
+    __table_args__ = (
+        UniqueConstraint("enterprise_id", "id", name="uq_asset_policy_tenant_id"),
+        ForeignKeyConstraint(
+            ["enterprise_id", "asset_id"],
+            ["equipment_assets.enterprise_id", "equipment_assets.id"],
+            name="fk_policy_proposal_asset_tenant",
+        ),
+        ForeignKeyConstraint(
+            ["enterprise_id", "credential_type_id"],
+            ["credential_types.enterprise_id", "credential_types.id"],
+            name="fk_policy_proposal_credential_tenant",
+        ),
+        ForeignKeyConstraint(
+            ["enterprise_id", "skill_id", "scale_id"],
+            ["skills.enterprise_id", "skills.id", "skills.scale_id"],
+            name="fk_policy_proposal_skill_scale_tenant",
+        ),
+        ForeignKeyConstraint(
+            ["scale_id", "min_level_id"],
+            ["skill_scale_levels.scale_id", "skill_scale_levels.id"],
+            name="fk_policy_proposal_threshold_scale",
+        ),
+        CheckConstraint(
+            "(kind = 'credential' AND credential_type_id IS NOT NULL "
+            "AND skill_id IS NULL AND scale_id IS NULL AND min_level_id IS NULL) OR "
+            "(kind = 'skill' AND credential_type_id IS NULL "
+            "AND skill_id IS NOT NULL AND scale_id IS NOT NULL AND min_level_id IS NOT NULL)",
+            name="ck_policy_proposal_kind_payload",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'approved', 'rejected')",
+            name="ck_policy_proposal_status",
+        ),
+        CheckConstraint(
+            "(status = 'pending' AND reviewed_by IS NULL AND reviewed_at IS NULL) OR "
+            "(status != 'pending' AND reviewed_by IS NOT NULL AND reviewed_at IS NOT NULL "
+            "AND reviewed_by != proposed_by AND review_note IS NOT NULL)",
+            name="ck_policy_proposal_independent_review",
+        ),
+        Index(
+            "uq_pending_asset_credential", "asset_id", "credential_type_id",
+            unique=True,
+            postgresql_where=text(
+                "status = 'pending' AND credential_type_id IS NOT NULL"
+            ),
+            sqlite_where=text("status = 'pending' AND credential_type_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_pending_asset_skill", "asset_id", "skill_id",
+            unique=True, postgresql_where=text("status = 'pending' AND skill_id IS NOT NULL"),
+            sqlite_where=text("status = 'pending' AND skill_id IS NOT NULL"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    enterprise_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("enterprises.id"), nullable=False
+    )
+    asset_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    credential_type_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    skill_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    scale_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    min_level_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    reason: Mapped[str] = mapped_column(String(400), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    proposed_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("user_accounts.id"), nullable=False
+    )
+    proposed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    reviewed_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("user_accounts.id")
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    review_note: Mapped[str | None] = mapped_column(String(400))
 
 
 class AssetDowntimeWindow(Base):

@@ -229,3 +229,59 @@ class EquipmentAuditPage(BaseModel):
     next_cursor: str | None
     has_more: bool
     detail_payloads_included: Literal[False] = False
+
+
+class PolicyProposalCreate(BaseModel):
+    kind: Literal["credential", "skill"]
+    credential_type_id: UUID | None = None
+    skill_id: UUID | None = None
+    min_level_id: UUID | None = None
+    reason: str = Field(min_length=10, max_length=400)
+
+    @field_validator("reason")
+    @classmethod
+    def substantive_reason(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 10:
+            raise ValueError("A substantive policy proposal reason is required")
+        return value
+
+    @model_validator(mode="after")
+    def validate_policy_kind(self) -> "PolicyProposalCreate":
+        if self.kind == "credential":
+            if self.credential_type_id is None or self.skill_id or self.min_level_id:
+                raise ValueError("Credential proposals require only credential_type_id")
+        elif self.skill_id is None or self.min_level_id is None or self.credential_type_id:
+            raise ValueError("Skill proposals require skill_id and min_level_id")
+        return self
+
+
+class PolicyReview(BaseModel):
+    note: str = Field(min_length=10, max_length=400)
+
+    @field_validator("note")
+    @classmethod
+    def substantive_note(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 10:
+            raise ValueError("Review note requires ten non-whitespace characters")
+        return value
+
+
+class PolicyProposalView(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    enterprise_id: UUID
+    asset_id: UUID
+    kind: Literal["credential", "skill"]
+    credential_type_id: UUID | None
+    skill_id: UUID | None
+    scale_id: UUID | None
+    min_level_id: UUID | None
+    reason: str
+    status: Literal["pending", "approved", "rejected"]
+    proposed_by: UUID
+    proposed_at: datetime
+    reviewed_by: UUID | None
+    reviewed_at: datetime | None
+    review_note: str | None

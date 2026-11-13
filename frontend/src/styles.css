@@ -1054,3 +1054,13 @@ h2 { margin: 6px 0 0; font-size: 18px; letter-spacing: -.025em; }
 .equipment-audit-row small { font-size: 10px; color: #66766e; }
 .equipment-audit-pages { display: flex; align-items: center; gap: 12px;
   flex-wrap: wrap; justify-content: center; }
+
+
+/* PR #22: independent approval for equipment-specific policy additions */
+.equipment-policy { display: grid; gap: 11px; padding: 14px 0;
+  border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.equipment-policy-list { display: grid; gap: 8px; max-height: 400px; overflow-y: auto; }
+.equipment-policy-row { display: grid; gap: 5px; border: 1px solid var(--line);
+  border-radius: 7px; padding: 11px; overflow-wrap: anywhere; }
+.equipment-policy-row small { font-size: 10px; color: #60726a; }
+.equipment-policy-review { display: flex; flex-wrap: wrap; gap: 8px; }

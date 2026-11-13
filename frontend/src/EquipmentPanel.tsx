@@ -3,6 +3,7 @@ import { useWorkspace } from "./WorkspaceContext";
 import EquipmentDowntimePanel from "./EquipmentDowntimePanel";
 import EquipmentCrewSnapshot from "./EquipmentCrewSnapshot";
 import EquipmentAuditExplorer from "./EquipmentAuditExplorer";
+import EquipmentPolicyPanel from "./EquipmentPolicyPanel";
 
 type Asset = {
   id: string; enterprise_id: string; unit_id: string; code: string; name: string;
@@ -64,15 +65,12 @@ export default function EquipmentPanel() {
   const [skills, setSkills] = useState<Skill[]>([]);
   const [scales, setScales] = useState<Scale[]>([]);
   const [readiness, setReadiness] = useState<Readiness | null>(null);
-  const [skillId, setSkillId] = useState("");
-  const [minLevelId, setMinLevelId] = useState("");
   const [selectedId, setSelectedId] = useState("");
   const [unitId, setUnitId] = useState("");
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [kind, setKind] = useState<Asset["kind"]>("machine");
   const [serialNumber, setSerialNumber] = useState("");
-  const [selectedType, setSelectedType] = useState("");
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -148,8 +146,6 @@ export default function EquipmentPanel() {
     }
   }
   const asset = assets.find(x => x.id === selectedId);
-  const selectedSkill = skills.find(x => x.id === skillId);
-  const levels = scales.find(x => x.id === selectedSkill?.scale_id)?.levels ?? [];
   const root = "/api/v1/equipment";
   const csrf = session?.csrf_token;
 
@@ -266,57 +262,18 @@ export default function EquipmentPanel() {
                 Требования самого наряда сохраняются.</p>}
               {admin && (
                 <>
-                  <div className="equipment-actions">
-                    <label>Требуемая компетенция
-                      <select aria-label="Компетенция оборудования"
-                        value={skillId} onChange={e => {
-                          setSkillId(e.target.value);
-                          setMinLevelId("");
-                        }}>
-                        <option value="">Выберите компетенцию</option>
-                        {skills.filter(skill => skill.is_active &&
-                          !asset.required_skills.some(x => x.skill_id === skill.id),
-                        ).map(skill => (
-                          <option key={skill.id} value={skill.id}>{skill.name}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>Минимальный подтверждённый уровень
-                      <select aria-label="Уровень компетенции оборудования"
-                        value={minLevelId} onChange={e => setMinLevelId(e.target.value)}>
-                        <option value="">Выберите уровень</option>
-                        {levels.map(level => (
-                          <option key={level.id} value={level.id}>
-                            {level.ordinal} — {level.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <button type="button" disabled={busy || !skillId || !minLevelId}
-                      onClick={() => void mutate(() => api<Asset>(
-                        root + "/assets/" + asset.id + "/required-skills",
-                        csrf, "POST", { skill_id: skillId, min_level_id: minLevelId },
-                      ), "Обязательная компетенция оборудования добавлена.")}>
-                      Добавить требование к навыку
-                    </button>
-                  </div>
-                  <div className="equipment-actions">
-                    <label>Добавить обязательный тип допуска
-                      <select value={selectedType} onChange={e => setSelectedType(e.target.value)}>
-                        <option value="">Выберите тип документа</option>
-                        {types.filter(type =>
-                          !asset.required_credential_type_ids.includes(type.id),
-                        ).map(type => <option key={type.id} value={type.id}>{type.name}</option>)}
-                      </select>
-                    </label>
-                    <button type="button" disabled={busy || !selectedType}
-                      onClick={() => void mutate(() => api<Asset>(
-                        root + "/assets/" + asset.id + "/required-credentials",
-                        csrf, "POST", { type_id: selectedType },
-                      ), "Дополнительный тип допуска включён.")}>
-                      Добавить требование
-                    </button>
-                  </div>
+                  <EquipmentPolicyPanel
+                    key={asset.id}
+                    assetId={asset.id}
+                    actorId={session.user.id}
+                    csrfToken={csrf}
+                    types={types}
+                    skills={skills}
+                    scales={scales}
+                    activeCredentialIds={asset.required_credential_type_ids}
+                    activeSkillIds={asset.required_skills.map(x => x.skill_id)}
+                    onChanged={() => setRev(x => x + 1)}
+                  />
                   <label>Причина смены состояния (не менее 10 символов)
                     <textarea value={reason} minLength={10} maxLength={400}
                       onChange={e => setReason(e.target.value)} />

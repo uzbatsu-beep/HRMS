@@ -18,6 +18,7 @@ from app.database import get_db
 from app.equipment import audit_explorer, readiness, service
 from app.equipment.models import (
     AssetCredentialRequirement, AssetDowntimeWindow, AssetSkillRequirement,
+    AssetPolicyProposal,
     EquipmentAsset, EquipmentAuditEvent,
     WorkEquipmentLink, WorkPermit,
 )
@@ -27,6 +28,7 @@ from app.equipment.schemas import (
     AssetStateChange, AssetView, EquipmentReadiness, LinkedWorkReadiness,
     EquipmentLinkCreate, PermitDraft, PermitReason, PermitView, SafetyPackage,
     CrewReadinessSnapshot, EquipmentAuditPage,
+    PolicyProposalCreate, PolicyProposalView, PolicyReview,
 )
 from app.identity.models import UserAccount
 from app.identity.security import get_current_user, require_admin, require_csrf
@@ -214,81 +216,184 @@ def set_asset_state(
     return asset_view(db, asset)
 
 
+# Legacy immediate-write endpoints are deliberately retired: they cannot bypass
+# the new independent policy approval workflow.
 @router.post(
     "/assets/{asset_id}/required-credentials",
-    status_code=status.HTTP_201_CREATED, response_model=AssetView,
     dependencies=[Depends(require_csrf)],
 )
-def require_asset_credential(
+def legacy_credential_policy(
     asset_id: UUID, payload: AssetCredentialCreate,
     admin: UserAccount = Depends(require_admin),  # noqa: B008
     db: Session = Depends(get_db),  # noqa: B008
-) -> AssetView:
-    asset = get_asset(db, admin, asset_id)
-    work_service.lock_enterprise(db, asset.enterprise_id)
-    kind = db.get(CredentialType, payload.type_id)
-    if kind is None or kind.enterprise_id != asset.enterprise_id:
-        raise HTTPException(status_code=422, detail="Credential type belongs to another tenant")
-    prior = db.scalar(select(AssetCredentialRequirement).where(
-        AssetCredentialRequirement.asset_id == asset.id,
-        AssetCredentialRequirement.type_id == kind.id,
-    ))
-    if prior:
-        raise HTTPException(status_code=409, detail="Requirement already exists")
-    db.add(AssetCredentialRequirement(
-        enterprise_id=asset.enterprise_id, asset_id=asset.id,
-        type_id=kind.id, added_by=admin.id,
-    ))
-    # A stricter equipment requirement becomes active immediately, so already
-    # executing work must enter a software hold pending human reauthorization.
-    links = db.scalars(select(WorkEquipmentLink).where(
-        WorkEquipmentLink.asset_id == asset.id,
-        WorkEquipmentLink.enterprise_id == asset.enterprise_id,
-    )).all()
-    for link in links:
-        order = db.get(WorkOrder, link.work_order_id)
-        if order and order.status == "in_progress":
-            hold_active_work(
-                db, order, admin, "Equipment credential policy changed during work"
-            )
-    service.audit(db, admin, asset.enterprise_id, "asset.credential_required", asset.id, {
-        "type_id": str(kind.id),
-    })
-    work_service.commit_safe(db)
-    return asset_view(db, asset)
+) -> None:
+    get_asset(db, admin, asset_id)
+    raise HTTPException(status_code=409, detail="Use /policy-proposals and independent approval")
 
 
 @router.post(
     "/assets/{asset_id}/required-skills",
-    status_code=status.HTTP_201_CREATED, response_model=AssetView,
     dependencies=[Depends(require_csrf)],
 )
-def require_asset_skill(
+def legacy_skill_policy(
     asset_id: UUID, payload: AssetSkillCreate,
     admin: UserAccount = Depends(require_admin),  # noqa: B008
     db: Session = Depends(get_db),  # noqa: B008
-) -> AssetView:
+) -> None:
+    get_asset(db, admin, asset_id)
+    raise HTTPException(status_code=409, detail="Use /policy-proposals and independent approval")
+
+
+def validate_policy(
+    db: Session, asset: EquipmentAsset,
+    kind: str, credential_type_id: UUID | None,
+    skill_id: UUID | None, min_level_id: UUID | None,
+) -> tuple[CredentialType | None, Skill | None, SkillScaleLevel | None]:
+    """Always revalidate references, including at independent approval."""
+    cred = db.get(CredentialType, credential_type_id) if credential_type_id else None
+    skill = db.get(Skill, skill_id) if skill_id else None
+    level = db.get(SkillScaleLevel, min_level_id) if min_level_id else None
+    if kind == "credential":
+        if cred is None or cred.enterprise_id != asset.enterprise_id:
+            raise HTTPException(status_code=422, detail="Invalid or foreign credential type")
+        exists = db.scalar(select(AssetCredentialRequirement.id).where(
+            AssetCredentialRequirement.enterprise_id == asset.enterprise_id,
+            AssetCredentialRequirement.asset_id == asset.id,
+            AssetCredentialRequirement.type_id == cred.id,
+        ))
+        if exists is not None:
+            raise HTTPException(status_code=409, detail="Credential policy is already active")
+    else:
+        if (
+            skill is None or not skill.is_active or skill.enterprise_id != asset.enterprise_id
+            or level is None or level.scale_id != skill.scale_id
+        ):
+            raise HTTPException(status_code=422, detail="Foreign, inactive or mismatched skill")
+        exists = db.scalar(select(AssetSkillRequirement.id).where(
+            AssetSkillRequirement.enterprise_id == asset.enterprise_id,
+            AssetSkillRequirement.asset_id == asset.id,
+            AssetSkillRequirement.skill_id == skill.id,
+        ))
+        if exists is not None:
+            raise HTTPException(status_code=409, detail="Skill policy already active")
+    return cred, skill, level
+
+
+@router.get(
+    "/assets/{asset_id}/policy-proposals", response_model=list[PolicyProposalView],
+)
+def list_asset_policy_proposals(
+    asset_id: UUID,
+    admin: UserAccount = Depends(require_admin),  # noqa: B008
+    db: Session = Depends(get_db),  # noqa: B008
+) -> list[AssetPolicyProposal]:
+    asset = get_asset(db, admin, asset_id)
+    return list(db.scalars(select(AssetPolicyProposal).where(
+        AssetPolicyProposal.enterprise_id == asset.enterprise_id,
+        AssetPolicyProposal.asset_id == asset.id,
+    ).order_by(
+        AssetPolicyProposal.proposed_at.desc(), AssetPolicyProposal.id.desc(),
+    ).limit(100)).all())
+
+
+@router.post(
+    "/assets/{asset_id}/policy-proposals",
+    response_model=PolicyProposalView,
+    status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_csrf)],
+)
+def submit_asset_policy_proposal(
+    asset_id: UUID, payload: PolicyProposalCreate,
+    admin: UserAccount = Depends(require_admin),  # noqa: B008
+    db: Session = Depends(get_db),  # noqa: B008
+) -> PolicyProposalView:
     asset = get_asset(db, admin, asset_id)
     work_service.lock_enterprise(db, asset.enterprise_id)
-    skill = db.get(Skill, payload.skill_id)
-    threshold = db.get(SkillScaleLevel, payload.min_level_id)
-    if (
-        skill is None or not skill.is_active or skill.enterprise_id != asset.enterprise_id
-        or threshold is None or threshold.scale_id != skill.scale_id
-    ):
-        raise HTTPException(status_code=422, detail="Foreign, inactive or mismatched skill")
-    existing = db.scalar(select(AssetSkillRequirement).where(
-        AssetSkillRequirement.asset_id == asset.id,
-        AssetSkillRequirement.skill_id == skill.id,
-    ))
-    if existing is not None:
-        raise HTTPException(status_code=409, detail="Asset skill already required")
-    db.add(AssetSkillRequirement(
-        enterprise_id=asset.enterprise_id, asset_id=asset.id,
-        skill_id=skill.id, scale_id=skill.scale_id,
-        min_level_id=threshold.id, added_by=admin.id,
-    ))
-    # Stricter requirements cannot silently leave an active task running.
+    credential, skill, level = validate_policy(
+        db, asset, payload.kind, payload.credential_type_id,
+        payload.skill_id, payload.min_level_id,
+    )
+    # The tenant lock plus partial unique DB indexes deny concurrent duplicates.
+    if payload.kind == "credential":
+        pending = db.scalar(select(AssetPolicyProposal.id).where(
+            AssetPolicyProposal.enterprise_id == asset.enterprise_id,
+            AssetPolicyProposal.asset_id == asset.id,
+            AssetPolicyProposal.status == "pending",
+            AssetPolicyProposal.kind == "credential",
+            AssetPolicyProposal.credential_type_id == credential.id,
+        ))
+    else:
+        pending = db.scalar(select(AssetPolicyProposal.id).where(
+            AssetPolicyProposal.enterprise_id == asset.enterprise_id,
+            AssetPolicyProposal.asset_id == asset.id,
+            AssetPolicyProposal.status == "pending",
+            AssetPolicyProposal.kind == "skill",
+            AssetPolicyProposal.skill_id == skill.id,
+        ))
+    if pending is not None:
+        raise HTTPException(status_code=409, detail="Identical policy proposal pending")
+    row = AssetPolicyProposal(
+        enterprise_id=asset.enterprise_id, asset_id=asset.id, kind=payload.kind,
+        credential_type_id=credential.id if credential else None,
+        skill_id=skill.id if skill else None,
+        scale_id=skill.scale_id if skill else None,
+        min_level_id=level.id if level else None,
+        reason=payload.reason, proposed_by=admin.id,
+    )
+    db.add(row)
+    work_service.flush_safe(db)
+    service.audit(db, admin, asset.enterprise_id, "policy.proposed", row.id, {
+        "asset_id": str(asset.id), "kind": row.kind,
+        "reason": row.reason,
+    })
+    work_service.commit_safe(db)
+    return PolicyProposalView.model_validate(row)
+
+
+def locked_policy(
+    db: Session, admin: UserAccount, asset_id: UUID, proposal_id: UUID,
+) -> tuple[EquipmentAsset, AssetPolicyProposal]:
+    asset = get_asset(db, admin, asset_id)
+    work_service.lock_enterprise(db, asset.enterprise_id)
+    row = db.get(AssetPolicyProposal, proposal_id)
+    if row is None or row.enterprise_id != asset.enterprise_id or row.asset_id != asset.id:
+        raise HTTPException(status_code=404, detail="Policy proposal not found")
+    if row.status != "pending":
+        raise HTTPException(status_code=409, detail="Policy proposal already reviewed")
+    if row.proposed_by == admin.id:
+        raise HTTPException(status_code=403, detail="Independent administrator required")
+    return asset, row
+
+
+@router.post(
+    "/assets/{asset_id}/policy-proposals/{proposal_id}/approve",
+    response_model=AssetView, dependencies=[Depends(require_csrf)],
+)
+def approve_asset_policy_proposal(
+    asset_id: UUID, proposal_id: UUID, payload: PolicyReview,
+    admin: UserAccount = Depends(require_admin),  # noqa: B008
+    db: Session = Depends(get_db),  # noqa: B008
+) -> AssetView:
+    asset, row = locked_policy(db, admin, asset_id, proposal_id)
+    cred, skill, level = validate_policy(
+        db, asset, row.kind, row.credential_type_id, row.skill_id, row.min_level_id
+    )
+    if row.kind == "credential":
+        db.add(AssetCredentialRequirement(
+            enterprise_id=asset.enterprise_id, asset_id=asset.id,
+            type_id=cred.id, added_by=admin.id,
+        ))
+    else:
+        # Never permit a stored proposal to weaken or replace existing rules.
+        db.add(AssetSkillRequirement(
+            enterprise_id=asset.enterprise_id, asset_id=asset.id,
+            skill_id=skill.id, scale_id=skill.scale_id,
+            min_level_id=level.id, added_by=admin.id,
+        ))
+    row.status = "approved"
+    row.reviewed_by = admin.id
+    row.reviewed_at = datetime.now(UTC)
+    row.review_note = payload.note
+    work_service.flush_safe(db)
     links = db.scalars(select(WorkEquipmentLink).where(
         WorkEquipmentLink.enterprise_id == asset.enterprise_id,
         WorkEquipmentLink.asset_id == asset.id,
@@ -297,14 +402,43 @@ def require_asset_skill(
         order = db.get(WorkOrder, link.work_order_id)
         if order is not None and order.status == "in_progress":
             hold_active_work(
-                db, order, admin, "Equipment skill policy changed during work"
+                db, order, admin,
+                "Independently approved equipment policy changed during work",
             )
-    service.audit(db, admin, asset.enterprise_id, "asset.skill_required", asset.id, {
-        "skill_id": str(skill.id), "min_level_id": str(threshold.id),
-        "min_ordinal": threshold.ordinal,
+    action = ("asset.credential_required" if row.kind == "credential"
+              else "asset.skill_required")
+    service.audit(db, admin, asset.enterprise_id, action, asset.id, {
+        "proposal_id": str(row.id), "kind": row.kind,
+        "type_id": str(cred.id) if cred else None,
+        "skill_id": str(skill.id) if skill else None,
+        "min_level_id": str(level.id) if level else None,
+    })
+    service.audit(db, admin, asset.enterprise_id, "policy.approved", row.id, {
+        "asset_id": str(asset.id), "kind": row.kind, "note": payload.note,
     })
     work_service.commit_safe(db)
     return asset_view(db, asset)
+
+
+@router.post(
+    "/assets/{asset_id}/policy-proposals/{proposal_id}/reject",
+    response_model=PolicyProposalView, dependencies=[Depends(require_csrf)],
+)
+def reject_asset_policy_proposal(
+    asset_id: UUID, proposal_id: UUID, payload: PolicyReview,
+    admin: UserAccount = Depends(require_admin),  # noqa: B008
+    db: Session = Depends(get_db),  # noqa: B008
+) -> PolicyProposalView:
+    asset, row = locked_policy(db, admin, asset_id, proposal_id)
+    row.status = "rejected"
+    row.reviewed_by = admin.id
+    row.reviewed_at = datetime.now(UTC)
+    row.review_note = payload.note
+    service.audit(db, admin, asset.enterprise_id, "policy.rejected", row.id, {
+        "asset_id": str(asset.id), "kind": row.kind, "note": payload.note,
+    })
+    work_service.commit_safe(db)
+    return PolicyProposalView.model_validate(row)
 
 
 @router.get("/assets/{asset_id}/downtime", response_model=list[DowntimeView])

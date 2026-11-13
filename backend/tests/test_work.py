@@ -1047,6 +1047,25 @@ def permit_transition(
     )
 
 
+def add_equipment_credential(
+    client: TestClient, asset: dict, type_id: str,
+):
+    proposal = client.post(
+        f"{EQUIPMENT}/assets/{asset['id']}/policy-proposals",
+        headers=auth(client), json={
+            "kind": "credential", "credential_type_id": type_id,
+            "reason": "Synthetic required equipment credential independently reviewed",
+        },
+    )
+    if proposal.status_code != 201:
+        return proposal
+    return client.post(
+        f"{EQUIPMENT}/assets/{asset['id']}/policy-proposals/{proposal.json()['id']}/approve",
+        headers=auth(client, "wm-reviewer"),
+        json={"note": "Second administrator approved synthetic equipment policy"},
+    )
+
+
 def test_equipment_requires_independent_permit_and_extra_credential(
     scenario: tuple[TestClient, Session], monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1060,11 +1079,8 @@ def test_equipment_requires_independent_permit_and_extra_credential(
             "requires_expiry": True,
         },
     )
-    requirement = client.post(
-        f"{EQUIPMENT}/assets/{asset['id']}/required-credentials",
-        headers=auth(client), json={"type_id": extra["id"]},
-    )
-    assert requirement.status_code == 201, requirement.text
+    requirement = add_equipment_credential(client, asset, extra["id"])
+    assert requirement.status_code == 200, requirement.text
     verified_skills(client, s)
     verified_permit(client, s)
     work = create_work(client, s, "equipment-safety-17")
@@ -1219,11 +1235,8 @@ def test_new_asset_requirement_places_active_work_on_software_hold(
             "kind": "training", "requires_expiry": True, "is_safety_critical": False,
         },
     )
-    changed = client.post(
-        f"{EQUIPMENT}/assets/{asset['id']}/required-credentials",
-        json={"type_id": extra["id"]}, headers=auth(client),
-    )
-    assert changed.status_code == 201, changed.text
+    changed = add_equipment_credential(client, asset, extra["id"])
+    assert changed.status_code == 200, changed.text
     assert client.get(
         f"{BASE}/orders/{work['id']}"
     ).json()["status"] == "on_hold"
@@ -1247,10 +1260,21 @@ def test_new_asset_requirement_places_active_work_on_software_hold(
 def add_equipment_skill(
     client: TestClient, asset: dict, skill_id: str, minimum_id: str,
 ):
-    return client.post(
-        f"{EQUIPMENT}/assets/{asset['id']}/required-skills",
+    proposal = client.post(
+        f"{EQUIPMENT}/assets/{asset['id']}/policy-proposals",
         headers=auth(client),
-        json={"skill_id": skill_id, "min_level_id": minimum_id},
+        json={
+            "kind": "skill", "skill_id": skill_id,
+            "min_level_id": minimum_id,
+            "reason": "Synthetic equipment competence policy change for testing",
+        },
+    )
+    if proposal.status_code != 201:
+        return proposal
+    return client.post(
+        f"{EQUIPMENT}/assets/{asset['id']}/policy-proposals/{proposal.json()['id']}/approve",
+        headers=auth(client, "wm-reviewer"),
+        json={"note": "Reviewed and approved by independent test administrator"},
     )
 
 
@@ -1261,7 +1285,7 @@ def test_asset_skill_threshold_is_additive_latest_approved_and_not_downgradable(
     s = seed(client)
     asset = add_test_asset(client, s, "machine-skill-18")
     result = add_equipment_skill(client, asset, s["skill"], s["level_high"])
-    assert result.status_code == 201, result.text
+    assert result.status_code == 200, result.text
     assert result.json()["required_skills"][0]["min_ordinal"] == 3
     assert add_equipment_skill(client, asset, s["skill"], s["level_low"]).status_code == 409
     verified_skills(client, s, s["level_low"])
@@ -1288,27 +1312,31 @@ def test_asset_skill_write_rejects_bad_scale_roles_and_scope(
     client, _db = scenario
     s = seed(client)
     asset = add_test_asset(client, s, "machine-skills-rbac-18")
+    endpoint = f"{EQUIPMENT}/assets/{asset['id']}/policy-proposals"
+    valid = {
+        "kind": "skill", "skill_id": s["skill"],
+        "min_level_id": s["level_high"],
+        "reason": "Synthetic governed robot qualification requirement",
+    }
     invalid = client.post(
-        f"{EQUIPMENT}/assets/{asset['id']}/required-skills",
-        headers=auth(client),
-        json={"skill_id": s["skill"], "min_level_id": s["foreign_person"]},
+        endpoint, headers=auth(client),
+        json={**valid, "min_level_id": s["foreign_person"]},
     )
     assert invalid.status_code == 422
+    assert client.post(endpoint, json=valid).status_code == 403
     assert client.post(
-        f"{EQUIPMENT}/assets/{asset['id']}/required-skills",
-        json={"skill_id": s["skill"], "min_level_id": s["level_high"]},
+        endpoint, headers=auth(client, "wm-viewer"), json=valid,
+    ).status_code == 403
+    assert client.post(
+        endpoint, headers=auth(client, "wm-manager"), json=valid,
     ).status_code == 403
     assert client.post(
         f"{EQUIPMENT}/assets/{asset['id']}/required-skills",
-        headers=auth(client, "wm-viewer"),
-        json={"skill_id": s["skill"], "min_level_id": s["level_high"]},
-    ).status_code == 403
-    assert client.post(
-        f"{EQUIPMENT}/assets/{asset['id']}/required-skills",
-        headers=auth(client, "wm-manager"),
-        json={"skill_id": s["skill"], "min_level_id": s["level_high"]},
-    ).status_code == 403
-    assert add_equipment_skill(client, asset, s["skill"], s["level_high"]).status_code == 201
+        headers=auth(client), json={
+            "skill_id": s["skill"], "min_level_id": s["level_high"],
+        },
+    ).status_code == 409
+    assert add_equipment_skill(client, asset, s["skill"], s["level_high"]).status_code == 200
     assert client.get(
         f"{EQUIPMENT}/enterprises/{s['enterprise']}/assets",
     ).json()[0]["required_skills"][0]["skill_id"] == s["skill"]
@@ -1344,7 +1372,7 @@ def test_adding_asset_skill_during_running_work_forces_hold_and_rechecks(
         "category_id": category, "scale_id": scale["id"],
     })
     added = add_equipment_skill(client, asset, extra["id"], s["level_high"])
-    assert added.status_code == 201, added.text
+    assert added.status_code == 200, added.text
     assert client.get(f"{BASE}/orders/{work['id']}").json()["status"] == "on_hold"
     fail = client.post(
         f"{BASE}/orders/{work['id']}/resume",
@@ -1836,3 +1864,196 @@ def test_equipment_audit_explorer_scope_validation_and_legacy_compat(
     assert current.status_code == 200
     assert "details_json" not in current.json()["items"][0]
     assert current.json()["items"][0]["subject_id"] == asset["id"]
+
+
+# PR #22 — independent additive equipment policy governance.
+
+def test_governed_policy_is_inactive_before_independent_review_and_reject_preserves_rules(
+    scenario: tuple[TestClient, Session],
+) -> None:
+    client, db = scenario
+    s = seed(client)
+    verified_skills(client, s)
+    verified_permit(client, s)
+    asset = add_test_asset(client, s, "policy-review-22")
+    work = create_work(client, s, "policy-review-work-22")
+    link_test_asset(client, work, asset)
+    assert check_candidate(client, work, s["person"])["eligible"] is True
+    route = f"{EQUIPMENT}/assets/{asset['id']}/policy-proposals"
+    body = {
+        "kind": "skill", "skill_id": s["skill"],
+        "min_level_id": s["level_high"],
+        "reason": "Engineering assessment requires advanced qualification level",
+    }
+    proposed = client.post(route, headers=auth(client), json=body)
+    assert proposed.status_code == 201, proposed.text
+    row = proposed.json()
+    assert row["status"] == "pending" and row["reviewed_by"] is None
+    assert row["proposed_by"]
+    assert check_candidate(client, work, s["person"])["eligible"] is True
+    assert client.get(
+        f"{EQUIPMENT}/enterprises/{s['enterprise']}/assets",
+    ).json()[0]["required_skills"] == []
+    assert client.post(route, headers=auth(client), json=body).status_code == 409
+    review_route = route + "/" + row["id"]
+    review = {"note": "Independent review of equipment policy justification"}
+    assert client.post(
+        review_route + "/approve", headers=auth(client), json=review,
+    ).status_code == 403
+    assert client.post(
+        review_route + "/reject", headers=auth(client), json=review,
+    ).status_code == 403
+    assert client.post(
+        review_route + "/approve", headers=auth(client, "wm-manager"), json=review,
+    ).status_code == 403
+    assert client.post(
+        review_route + "/approve", json=review,
+    ).status_code == 403
+    rejected = client.post(
+        review_route + "/reject", headers=auth(client, "wm-reviewer"), json=review,
+    )
+    assert rejected.status_code == 200, rejected.text
+    assert rejected.json()["status"] == "rejected"
+    assert rejected.json()["reviewed_by"] != rejected.json()["proposed_by"]
+    assert client.post(
+        review_route + "/approve", headers=auth(client, "wm-reviewer"), json=review,
+    ).status_code == 409
+    assert check_candidate(client, work, s["person"])["eligible"] is True
+    assert client.get(
+        f"{EQUIPMENT}/enterprises/{s['enterprise']}/assets",
+    ).json()[0]["required_skills"] == []
+
+    replaced = client.post(route, headers=auth(client), json=body)
+    assert replaced.status_code == 201
+    approved = client.post(
+        route + "/" + replaced.json()["id"] + "/approve",
+        headers=auth(client, "wm-reviewer"), json=review,
+    )
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["required_skills"][0]["skill_id"] == s["skill"]
+    assert client.post(route, headers=auth(client), json=body).status_code == 409
+    history = client.get(route)
+    assert history.status_code == 200
+    assert {p["status"] for p in history.json()} == {"rejected", "approved"}
+    from app.equipment.models import AssetPolicyProposal
+    rows = db.scalars(select(AssetPolicyProposal)).all()
+    assert len(rows) == 2
+    assert len({r.id for r in rows}) == 2
+    from app.equipment.models import EquipmentAuditEvent
+    actions = {r.action for r in db.scalars(select(EquipmentAuditEvent)).all()}
+    assert {"policy.proposed", "policy.approved", "policy.rejected"} <= actions
+
+
+def test_governed_pending_policy_does_not_hold_live_work_until_approval(
+    scenario: tuple[TestClient, Session], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, db = scenario
+    s = seed(client)
+    verified_skills(client, s)
+    verified_permit(client, s)
+    asset = add_test_asset(client, s, "policy-live-22")
+    work = create_work(client, s, "policy-live-work-22")
+    link_test_asset(client, work, asset)
+    assert assign(client, work, s["person"]).status_code == 200
+    permit = prepare_test_permit(client, work)
+    assert permit_transition(client, work, permit, "submit").status_code == 200
+    assert permit_transition(
+        client, work, permit, "approve", "wm-reviewer"
+    ).status_code == 200
+    start = datetime.fromisoformat(work["starts_at"])
+    monkeypatch.setattr(work_service, "utcnow", lambda: start + timedelta(minutes=5))
+    assert client.post(
+        f"{BASE}/orders/{work['id']}/start", headers=auth(client),
+    ).status_code == 200
+    route = f"{EQUIPMENT}/assets/{asset['id']}/policy-proposals"
+    kind = post(
+        client, f"/api/v1/credentials/enterprises/{s['enterprise']}/types", {
+            "code": "governance-service-22", "name": "Synthetic service authorization",
+            "kind": "training", "is_safety_critical": False,
+            "requires_expiry": True,
+        },
+    )
+    pending = client.post(route, headers=auth(client), json={
+        "kind": "credential", "credential_type_id": kind["id"],
+        "reason": "New machine maintenance qualification required by the plan",
+    })
+    assert pending.status_code == 201, pending.text
+    assert client.get(f"{BASE}/orders/{work['id']}").json()["status"] == "in_progress"
+    assert client.post(
+        f"{EQUIPMENT}/assets/{asset['id']}/required-credentials",
+        headers=auth(client), json={"type_id": kind["id"]},
+    ).status_code == 409
+    approved = client.post(
+        route + "/" + pending.json()["id"] + "/approve",
+        headers=auth(client, "wm-reviewer"),
+        json={"note": "Reviewed new service requirement and approved addition"},
+    )
+    assert approved.status_code == 200, approved.text
+    assert kind["id"] in approved.json()["required_credential_type_ids"]
+    assert client.get(f"{BASE}/orders/{work['id']}").json()["status"] == "on_hold"
+    blocked = client.post(
+        f"{BASE}/orders/{work['id']}/resume", headers=auth(client),
+        json={"reason": "Permit for approved equipment requirement is missing"},
+    )
+    assert blocked.status_code == 409
+    assert "EQUIPMENT_CREDENTIAL_MISSING" in str(blocked.json())
+
+
+def test_governed_policy_invalid_payload_scope_and_stale_review(
+    scenario: tuple[TestClient, Session],
+) -> None:
+    client, db = scenario
+    s = seed(client)
+    asset = add_test_asset(client, s, "policy-stale-22")
+    route = f"{EQUIPMENT}/assets/{asset['id']}/policy-proposals"
+    body = {
+        "kind": "skill", "skill_id": s["skill"],
+        "min_level_id": s["level_high"],
+        "reason": "Competence threshold for synthetic repair authorization",
+    }
+    assert client.post(route, headers=auth(client), json={
+        **body, "credential_type_id": s["permit"],
+    }).status_code == 422
+    assert client.post(route, headers=auth(client), json={
+        **body, "min_level_id": s["foreign_person"],
+    }).status_code == 422
+    assert client.post(route, headers=auth(client), json={
+        **body, "reason": "   ",
+    }).status_code == 422
+    assert client.post(route, headers=auth(client, "wm-manager"),
+                       json=body).status_code == 403
+    assert client.post(route, json=body).status_code == 403
+    row = client.post(route, headers=auth(client), json=body).json()
+    assert row["status"] == "pending"
+    auth(client, "wm-viewer")
+    assert client.get(route).status_code == 403
+    auth(client)
+    # A foreign asset cannot be approached through this tenant's policy path.
+    assert client.get(
+        f"{EQUIPMENT}/assets/{s['foreign_person']}/policy-proposals",
+    ).status_code == 404
+    import uuid
+    assert client.post(
+        route + f"/{uuid.uuid4()}/approve", headers=auth(client, "wm-reviewer"),
+        json={"note": "Independent review of unknown policy proposal"},
+    ).status_code == 404
+    assert client.post(
+        route + "/" + row["id"] + "/approve",
+        headers=auth(client, "wm-reviewer"),
+        json={"note": "    "},
+    ).status_code == 422
+    # Policy revalidated during independent review; deactivation denies approval.
+    from app.competence.models import Skill
+    skill = db.get(Skill, UUID(s["skill"]))
+    skill.is_active = False
+    db.commit()
+    cannot = client.post(
+        route + "/" + row["id"] + "/approve",
+        headers=auth(client, "wm-reviewer"),
+        json={"note": "Skill now inactive so approval must fail closed"},
+    )
+    assert cannot.status_code == 422
+    assert client.get(route).json()[0]["status"] == "pending"
+    assert client.get(
+        f"{EQUIPMENT}/enterprises/{s['enterprise']}/assets",
+    ).json()[0]["required_skills"] == []
