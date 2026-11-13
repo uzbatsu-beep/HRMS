@@ -43,6 +43,7 @@ test("asset skill gates persist and scoped readiness shows permit blockers", asy
   await panel.getByLabel("Компетенция оборудования").selectOption(skill.id);
   await panel.getByLabel("Уровень компетенции оборудования").selectOption(high!.id);
   await panel.getByRole("button", { name: "Добавить требование к навыку" }).click();
+  await expect(panel.locator(".equipment-detail")).toContainText("уровень ≥ 3");
   const again = await page.request.get(
     "/api/v1/equipment/enterprises/" + seed.enterprise.id + "/assets",
   );
