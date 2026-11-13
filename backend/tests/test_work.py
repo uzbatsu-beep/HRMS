@@ -1080,7 +1080,7 @@ def test_equipment_requires_independent_permit_and_extra_credential(
         },
     )
     requirement = add_equipment_credential(client, asset, extra["id"])
-    assert requirement.status_code == 201, requirement.text
+    assert requirement.status_code == 200, requirement.text
     verified_skills(client, s)
     verified_permit(client, s)
     work = create_work(client, s, "equipment-safety-17")
@@ -1236,7 +1236,7 @@ def test_new_asset_requirement_places_active_work_on_software_hold(
         },
     )
     changed = add_equipment_credential(client, asset, extra["id"])
-    assert changed.status_code == 201, changed.text
+    assert changed.status_code == 200, changed.text
     assert client.get(
         f"{BASE}/orders/{work['id']}"
     ).json()["status"] == "on_hold"
@@ -1285,7 +1285,7 @@ def test_asset_skill_threshold_is_additive_latest_approved_and_not_downgradable(
     s = seed(client)
     asset = add_test_asset(client, s, "machine-skill-18")
     result = add_equipment_skill(client, asset, s["skill"], s["level_high"])
-    assert result.status_code == 201, result.text
+    assert result.status_code == 200, result.text
     assert result.json()["required_skills"][0]["min_ordinal"] == 3
     assert add_equipment_skill(client, asset, s["skill"], s["level_low"]).status_code == 409
     verified_skills(client, s, s["level_low"])
@@ -1336,7 +1336,7 @@ def test_asset_skill_write_rejects_bad_scale_roles_and_scope(
             "skill_id": s["skill"], "min_level_id": s["level_high"],
         },
     ).status_code == 409
-    assert add_equipment_skill(client, asset, s["skill"], s["level_high"]).status_code == 201
+    assert add_equipment_skill(client, asset, s["skill"], s["level_high"]).status_code == 200
     assert client.get(
         f"{EQUIPMENT}/enterprises/{s['enterprise']}/assets",
     ).json()[0]["required_skills"][0]["skill_id"] == s["skill"]
@@ -1372,7 +1372,7 @@ def test_adding_asset_skill_during_running_work_forces_hold_and_rechecks(
         "category_id": category, "scale_id": scale["id"],
     })
     added = add_equipment_skill(client, asset, extra["id"], s["level_high"])
-    assert added.status_code == 201, added.text
+    assert added.status_code == 200, added.text
     assert client.get(f"{BASE}/orders/{work['id']}").json()["status"] == "on_hold"
     fail = client.post(
         f"{BASE}/orders/{work['id']}/resume",
