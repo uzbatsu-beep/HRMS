@@ -25,8 +25,12 @@ class WorkOrder(Base):
         ),
         CheckConstraint("ends_at > starts_at", name="ck_work_order_interval"),
         CheckConstraint(
-            "status IN ('open', 'assigned', 'in_progress', 'completed', 'cancelled')",
+            "status IN ('open', 'assigned', 'in_progress', 'on_hold', 'completed', 'cancelled')",
             name="ck_work_order_status",
+        ),
+        CheckConstraint(
+            "priority IN ('routine', 'normal', 'urgent', 'critical')",
+            name="ck_work_order_priority",
         ),
     )
 
@@ -42,6 +46,7 @@ class WorkOrder(Base):
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="open")
+    priority: Mapped[str] = mapped_column(String(16), nullable=False, default="normal")
     created_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("user_accounts.id"), nullable=False
     )
@@ -51,6 +56,9 @@ class WorkOrder(Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    on_hold_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    hold_reason: Mapped[str | None] = mapped_column(String(400))
+    last_safety_check_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class WorkSkillRequirement(Base):
@@ -124,6 +132,54 @@ class WorkOrderAssignment(Base):
     assigned_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class WorkCrewMember(Base):
+    """Additional technical participant; leader remains WorkOrderAssignment."""
+
+    __tablename__ = "work_crew_members"
+    __table_args__ = (
+        UniqueConstraint("work_order_id", "person_id", name="uq_work_crew_person"),
+        UniqueConstraint("reservation_id", name="uq_work_crew_reservation"),
+        ForeignKeyConstraint(
+            ["enterprise_id", "work_order_id"],
+            ["work_orders.enterprise_id", "work_orders.id"],
+            name="fk_work_crew_order_tenant",
+        ),
+        ForeignKeyConstraint(
+            ["enterprise_id", "person_id"],
+            ["persons.enterprise_id", "persons.id"],
+            name="fk_work_crew_person_tenant",
+        ),
+        ForeignKeyConstraint(
+            ["enterprise_id", "resource_id"],
+            ["workforce_resources.enterprise_id", "workforce_resources.id"],
+            name="fk_work_crew_resource_tenant",
+        ),
+        CheckConstraint(
+            "role IN ('specialist', 'assistant', 'observer')",
+            name="ck_work_crew_role",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    enterprise_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("enterprises.id"), nullable=False
+    )
+    work_order_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    person_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    resource_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    reservation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("work_reservations.id"), nullable=False
+    )
+    role: Mapped[str] = mapped_column(String(24), nullable=False)
+    joined_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("user_accounts.id"), nullable=False
+    )
+    joined_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class WorkAuditEvent(Base):
