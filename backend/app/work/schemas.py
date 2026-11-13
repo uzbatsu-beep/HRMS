@@ -147,6 +147,19 @@ class SafetyCheck(BaseModel):
     members: list[SafetyMember]
 
 
+class PriorityChange(BaseModel):
+    priority: Literal["routine", "normal", "urgent", "critical"]
+    reason: str = Field(min_length=10, max_length=400)
+
+    @field_validator("reason")
+    @classmethod
+    def substantive_reason(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 10:
+            raise ValueError("Priority change requires a reason of 10 or more characters")
+        return value
+
+
 class ReasonNote(BaseModel):
     reason: str = Field(min_length=10, max_length=400)
 
