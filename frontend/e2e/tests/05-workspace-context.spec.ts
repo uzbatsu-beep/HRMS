@@ -13,7 +13,7 @@ test("enterprise and department context is shared with personnel and work module
   await page.locator(".workspace-navigation").getByRole("link", { name: /Персонал/ }).click();
   await expect(page.locator("#personnel").getByLabel("Предприятие"))
     .toHaveValue(seed.enterprise.id);
-  await expect(page.locator("#personnel").getByLabel("Подразделение"))
+  await expect(page.locator("#personnel .people-filters select").nth(1))
     .toHaveValue(seed.units.automation);
   await page.locator(".workspace-navigation").getByRole("link", {
     name: /Наряды и бригады/,
