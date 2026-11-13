@@ -82,7 +82,7 @@ class CandidateView(BaseModel):
     person_id: UUID
     employee_code: str
     full_name: str
-    resource_id: UUID
+    resource_id: UUID | None
     eligible: bool
     blockers: list[Blocker]
     verified_skills: list[UUID]
