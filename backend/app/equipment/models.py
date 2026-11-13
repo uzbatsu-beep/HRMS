@@ -92,6 +92,7 @@ class AssetSkillRequirement(Base):
     __tablename__ = "asset_skill_requirements"
     __table_args__ = (
         UniqueConstraint("asset_id", "skill_id", name="uq_asset_required_skill"),
+        UniqueConstraint("enterprise_id", "id", name="uq_asset_skill_tenant_id"),
         ForeignKeyConstraint(
             ["enterprise_id", "asset_id"],
             ["equipment_assets.enterprise_id", "equipment_assets.id"],
@@ -153,9 +154,14 @@ class AssetPolicyProposal(Base):
         ),
         CheckConstraint(
             "(kind = 'credential' AND credential_type_id IS NOT NULL "
-            "AND skill_id IS NULL AND scale_id IS NULL AND min_level_id IS NULL) OR "
+            "AND skill_id IS NULL AND scale_id IS NULL AND min_level_id IS NULL "
+            "AND expected_version IS NULL) OR "
             "(kind = 'skill' AND credential_type_id IS NULL "
-            "AND skill_id IS NOT NULL AND scale_id IS NOT NULL AND min_level_id IS NOT NULL)",
+            "AND skill_id IS NOT NULL AND scale_id IS NOT NULL AND min_level_id IS NOT NULL "
+            "AND expected_version IS NULL) OR "
+            "(kind = 'skill_upgrade' AND credential_type_id IS NULL "
+            "AND skill_id IS NOT NULL AND scale_id IS NOT NULL AND min_level_id IS NOT NULL "
+            "AND expected_version IS NOT NULL AND expected_version >= 1)",
             name="ck_policy_proposal_kind_payload",
         ),
         CheckConstraint(
@@ -195,6 +201,7 @@ class AssetPolicyProposal(Base):
     skill_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     scale_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
     min_level_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    expected_version: Mapped[int | None] = mapped_column(Integer)
     reason: Mapped[str] = mapped_column(String(400), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
     proposed_by: Mapped[uuid.UUID] = mapped_column(
@@ -208,6 +215,44 @@ class AssetPolicyProposal(Base):
     )
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     review_note: Mapped[str | None] = mapped_column(String(400))
+
+
+class AssetSkillPolicyRevision(Base):
+    """Append-only, independently approved increase above immutable v1 baseline."""
+
+    __tablename__ = "asset_skill_policy_revisions"
+    __table_args__ = (
+        UniqueConstraint("requirement_id", "version", name="uq_asset_skill_revision_version"),
+        UniqueConstraint("proposal_id", name="uq_asset_skill_revision_proposal"),
+        ForeignKeyConstraint(
+            ["enterprise_id", "requirement_id"],
+            ["asset_skill_requirements.enterprise_id", "asset_skill_requirements.id"],
+            name="fk_revision_skill_requirement_tenant",
+        ),
+        ForeignKeyConstraint(
+            ["scale_id", "min_level_id"],
+            ["skill_scale_levels.scale_id", "skill_scale_levels.id"],
+            name="fk_revision_level_scale",
+        ),
+        CheckConstraint("version >= 2", name="ck_asset_skill_revision_version"),
+    )
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    enterprise_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("enterprises.id"), nullable=False
+    )
+    requirement_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    scale_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    min_level_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    proposal_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("asset_policy_proposals.id"), nullable=False
+    )
+    approved_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("user_accounts.id"), nullable=False
+    )
+    approved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class AssetDowntimeWindow(Base):

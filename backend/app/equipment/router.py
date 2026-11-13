@@ -18,7 +18,7 @@ from app.database import get_db
 from app.equipment import audit_explorer, readiness, service
 from app.equipment.models import (
     AssetCredentialRequirement, AssetDowntimeWindow, AssetSkillRequirement,
-    AssetPolicyProposal,
+    AssetPolicyProposal, AssetSkillPolicyRevision,
     EquipmentAsset, EquipmentAuditEvent,
     WorkEquipmentLink, WorkPermit,
 )
@@ -28,7 +28,7 @@ from app.equipment.schemas import (
     AssetStateChange, AssetView, EquipmentReadiness, LinkedWorkReadiness,
     EquipmentLinkCreate, PermitDraft, PermitReason, PermitView, SafetyPackage,
     CrewReadinessSnapshot, EquipmentAuditPage,
-    PolicyProposalCreate, PolicyProposalView, PolicyReview,
+    PolicyProposalCreate, PolicyProposalView, PolicyReview, SkillPolicyRevisionView,
 )
 from app.identity.models import UserAccount
 from app.identity.security import get_current_user, require_admin, require_csrf
@@ -68,13 +68,14 @@ def asset_view(db: Session, item: EquipmentAsset) -> AssetView:
     skills: list[AssetSkillView] = []
     for requirement in skill_requirements:
         skill = db.get(Skill, requirement.skill_id)
-        minimum = db.get(SkillScaleLevel, requirement.min_level_id)
+        minimum, version = service.effective_skill_threshold(db, requirement)
         skills.append(AssetSkillView(
             id=requirement.id, skill_id=requirement.skill_id,
             skill_code=skill.code if skill else "missing",
             skill_name=skill.name if skill else "Missing or archived skill",
-            min_level_id=requirement.min_level_id,
             min_ordinal=minimum.ordinal if minimum else -1,
+            min_level_id=minimum.id if minimum else requirement.min_level_id,
+            version=version,
         ))
     return AssetView(
         id=item.id, enterprise_id=item.enterprise_id, unit_id=item.unit_id,
@@ -279,6 +280,77 @@ def validate_policy(
     return cred, skill, level
 
 
+def validate_skill_upgrade(
+    db: Session, asset: EquipmentAsset,
+    skill_id: UUID | None, min_level_id: UUID | None,
+    expected_version: int | None,
+) -> tuple[Skill, SkillScaleLevel, AssetSkillRequirement, int]:
+    """Re-check current policy version and strict monotonic threshold."""
+    skill = db.get(Skill, skill_id) if skill_id else None
+    threshold = db.get(SkillScaleLevel, min_level_id) if min_level_id else None
+    if (
+        skill is None or not skill.is_active or skill.enterprise_id != asset.enterprise_id
+        or threshold is None or threshold.scale_id != skill.scale_id
+    ):
+        raise HTTPException(status_code=422, detail="Invalid upgrade skill or scale")
+    requirement = db.scalar(select(AssetSkillRequirement).where(
+        AssetSkillRequirement.enterprise_id == asset.enterprise_id,
+        AssetSkillRequirement.asset_id == asset.id,
+        AssetSkillRequirement.skill_id == skill.id,
+    ))
+    if requirement is None or requirement.scale_id != skill.scale_id:
+        raise HTTPException(status_code=409, detail="Active skill baseline required")
+    current, version = service.effective_skill_threshold(db, requirement)
+    if current is None or current.scale_id != skill.scale_id:
+        raise HTTPException(status_code=409, detail="Current skill policy is invalid")
+    if expected_version != version:
+        raise HTTPException(status_code=409, detail="Stale skill policy version")
+    if threshold.ordinal <= current.ordinal:
+        raise HTTPException(status_code=422, detail="Only stricter skill levels may be proposed")
+    return skill, threshold, requirement, version
+
+
+@router.get(
+    "/assets/{asset_id}/skill-policy-revisions",
+    response_model=list[SkillPolicyRevisionView],
+)
+def skill_policy_revision_history(
+    asset_id: UUID,
+    admin: UserAccount = Depends(require_admin),  # noqa: B008
+    db: Session = Depends(get_db),  # noqa: B008
+) -> list[SkillPolicyRevisionView]:
+    """Admin-only read: synthetic v1 from immutable baseline plus approved revisions."""
+    asset = get_asset(db, admin, asset_id)
+    requirements = db.scalars(select(AssetSkillRequirement).where(
+        AssetSkillRequirement.enterprise_id == asset.enterprise_id,
+        AssetSkillRequirement.asset_id == asset.id,
+    ).order_by(AssetSkillRequirement.skill_id).limit(200)).all()
+    rows: list[SkillPolicyRevisionView] = []
+    for baseline in requirements:
+        minimum = db.get(SkillScaleLevel, baseline.min_level_id)
+        rows.append(SkillPolicyRevisionView(
+            requirement_id=baseline.id, skill_id=baseline.skill_id,
+            version=1, min_level_id=baseline.min_level_id,
+            min_ordinal=minimum.ordinal if minimum else -1,
+            approved_by=baseline.added_by, approved_at=baseline.created_at,
+            proposal_id=None,
+        ))
+        revisions = db.scalars(select(AssetSkillPolicyRevision).where(
+            AssetSkillPolicyRevision.enterprise_id == asset.enterprise_id,
+            AssetSkillPolicyRevision.requirement_id == baseline.id,
+        ).order_by(AssetSkillPolicyRevision.version).limit(100)).all()
+        for revision in revisions:
+            level = db.get(SkillScaleLevel, revision.min_level_id)
+            rows.append(SkillPolicyRevisionView(
+                requirement_id=baseline.id, skill_id=baseline.skill_id,
+                version=revision.version, min_level_id=revision.min_level_id,
+                min_ordinal=level.ordinal if level else -1,
+                approved_by=revision.approved_by, approved_at=revision.approved_at,
+                proposal_id=revision.proposal_id,
+            ))
+    return rows
+
+
 @router.get(
     "/assets/{asset_id}/policy-proposals", response_model=list[PolicyProposalView],
 )
@@ -308,10 +380,17 @@ def submit_asset_policy_proposal(
 ) -> PolicyProposalView:
     asset = get_asset(db, admin, asset_id)
     work_service.lock_enterprise(db, asset.enterprise_id)
-    credential, skill, level = validate_policy(
-        db, asset, payload.kind, payload.credential_type_id,
-        payload.skill_id, payload.min_level_id,
-    )
+    if payload.kind == "skill_upgrade":
+        skill, level, _requirement, _version = validate_skill_upgrade(
+            db, asset, payload.skill_id, payload.min_level_id,
+            payload.expected_version,
+        )
+        credential = None
+    else:
+        credential, skill, level = validate_policy(
+            db, asset, payload.kind, payload.credential_type_id,
+            payload.skill_id, payload.min_level_id,
+        )
     # The tenant lock plus partial unique DB indexes deny concurrent duplicates.
     if payload.kind == "credential":
         pending = db.scalar(select(AssetPolicyProposal.id).where(
@@ -326,7 +405,7 @@ def submit_asset_policy_proposal(
             AssetPolicyProposal.enterprise_id == asset.enterprise_id,
             AssetPolicyProposal.asset_id == asset.id,
             AssetPolicyProposal.status == "pending",
-            AssetPolicyProposal.kind == "skill",
+            AssetPolicyProposal.kind.in_(("skill", "skill_upgrade")),
             AssetPolicyProposal.skill_id == skill.id,
         ))
     if pending is not None:
@@ -337,7 +416,8 @@ def submit_asset_policy_proposal(
         skill_id=skill.id if skill else None,
         scale_id=skill.scale_id if skill else None,
         min_level_id=level.id if level else None,
-        reason=payload.reason, proposed_by=admin.id,
+        reason=payload.reason, expected_version=payload.expected_version,
+        proposed_by=admin.id,
     )
     db.add(row)
     work_service.flush_safe(db)
@@ -374,20 +454,33 @@ def approve_asset_policy_proposal(
     db: Session = Depends(get_db),  # noqa: B008
 ) -> AssetView:
     asset, row = locked_policy(db, admin, asset_id, proposal_id)
-    cred, skill, level = validate_policy(
-        db, asset, row.kind, row.credential_type_id, row.skill_id, row.min_level_id
-    )
+    if row.kind == "skill_upgrade":
+        skill, level, requirement, current_version = validate_skill_upgrade(
+            db, asset, row.skill_id, row.min_level_id, row.expected_version,
+        )
+        cred = None
+    else:
+        cred, skill, level = validate_policy(
+            db, asset, row.kind, row.credential_type_id, row.skill_id, row.min_level_id,
+        )
     if row.kind == "credential":
         db.add(AssetCredentialRequirement(
             enterprise_id=asset.enterprise_id, asset_id=asset.id,
             type_id=cred.id, added_by=admin.id,
         ))
-    else:
+    elif row.kind == "skill":
         # Never permit a stored proposal to weaken or replace existing rules.
         db.add(AssetSkillRequirement(
             enterprise_id=asset.enterprise_id, asset_id=asset.id,
             skill_id=skill.id, scale_id=skill.scale_id,
             min_level_id=level.id, added_by=admin.id,
+        ))
+    else:
+        db.add(AssetSkillPolicyRevision(
+            enterprise_id=asset.enterprise_id, requirement_id=requirement.id,
+            version=current_version + 1,
+            scale_id=skill.scale_id, min_level_id=level.id,
+            proposal_id=row.id, approved_by=admin.id, approved_at=datetime.now(UTC),
         ))
     row.status = "approved"
     row.reviewed_by = admin.id
@@ -405,13 +498,17 @@ def approve_asset_policy_proposal(
                 db, order, admin,
                 "Independently approved equipment policy changed during work",
             )
-    action = ("asset.credential_required" if row.kind == "credential"
-              else "asset.skill_required")
+    action = (
+        "asset.credential_required" if row.kind == "credential"
+        else "asset.skill_threshold_raised" if row.kind == "skill_upgrade"
+        else "asset.skill_required"
+    )
     service.audit(db, admin, asset.enterprise_id, action, asset.id, {
         "proposal_id": str(row.id), "kind": row.kind,
         "type_id": str(cred.id) if cred else None,
         "skill_id": str(skill.id) if skill else None,
         "min_level_id": str(level.id) if level else None,
+        "version": current_version + 1 if row.kind == "skill_upgrade" else 1,
     })
     service.audit(db, admin, asset.enterprise_id, "policy.approved", row.id, {
         "asset_id": str(asset.id), "kind": row.kind, "note": payload.note,

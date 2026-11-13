@@ -222,3 +222,20 @@ Existing active requirements survive migration and are not converted into
 fabricated approvals. Post-approval weakening, version replacement,
 certified PTW, paper signatures and PLC safety are still outside scope.
 See docs/adr/0018-equipment-policy-governance.md.
+
+
+### PR #23 — Immutable Equipment Skill Policy Versions (in review)
+
+Skill threshold increases now follow v1 baseline -> v2/v3 immutable
+approved revisions, with optimistic expected_version and second-admin
+approval. Only monotonic increases are allowed, rejection or pending
+submissions do not change the effective threshold, and concurrent/stale
+requests fail closed. Candidate matching and work lifecycle enforce the
+last approved revision. A new administration-only history API and
+Equipment UI show current version and immutable approval timeline.
+
+Existing baselines require no fabricated backfill, no downgrades/rollback
+are available, and old direct policy-write routes stay closed. Physical
+work authorization and certified safety functions remain external.
+See ADR-0019. Database downgrade would lose new safety constraints and
+must not be performed against operational data.

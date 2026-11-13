@@ -15,7 +15,7 @@ type Asset = {
 };
 type CredentialType = { id: string; code: string; name: string };
 type AssetSkill = { id: string; skill_id: string; skill_code: string;
-  skill_name: string; min_level_id: string; min_ordinal: number };
+  skill_name: string; min_level_id: string; min_ordinal: number; version: number };
 type Skill = { id: string; name: string; code: string; scale_id: string; is_active: boolean };
 type Scale = { id: string; levels: { id: string; ordinal: number; label: string }[] };
 type Readiness = { enterprise_id: string; total: number; blocked: number;
@@ -255,7 +255,7 @@ export default function EquipmentPanel() {
               {asset.required_skills.length > 0 ? (
                 <ul>
                   {asset.required_skills.map(rule => (
-                    <li key={rule.id}>{rule.skill_name}: уровень ≥ {rule.min_ordinal}</li>
+                    <li key={rule.id}>{rule.skill_name}: v{rule.version}, уровень ≥ {rule.min_ordinal}</li>
                   ))}
                 </ul>
               ) : <p>Специфические навыки оборудования ещё не заданы.
@@ -272,6 +272,7 @@ export default function EquipmentPanel() {
                     scales={scales}
                     activeCredentialIds={asset.required_credential_type_ids}
                     activeSkillIds={asset.required_skills.map(x => x.skill_id)}
+                    activeSkills={asset.required_skills}
                     onChanged={() => setRev(x => x + 1)}
                   />
                   <label>Причина смены состояния (не менее 10 символов)

@@ -2057,3 +2057,203 @@ def test_governed_policy_invalid_payload_scope_and_stale_review(
     assert client.get(
         f"{EQUIPMENT}/enterprises/{s['enterprise']}/assets",
     ).json()[0]["required_skills"] == []
+
+
+# PR #23 — immutable, independently reviewed skill policy version increases.
+
+def upgrade_equipment_skill(
+    client: TestClient, asset: dict, s: dict, minimum_id: str, expected: int,
+):
+    return client.post(
+        f"{EQUIPMENT}/assets/{asset['id']}/policy-proposals",
+        headers=auth(client), json={
+            "kind": "skill_upgrade", "skill_id": s["skill"],
+            "min_level_id": minimum_id, "expected_version": expected,
+            "reason": "Additional synthetic robot teaching qualification is required",
+        },
+    )
+
+
+def approve_upgrade(client: TestClient, asset: dict, proposal: dict):
+    return client.post(
+        f"{EQUIPMENT}/assets/{asset['id']}/policy-proposals/{proposal['id']}/approve",
+        headers=auth(client, "wm-reviewer"),
+        json={"note": "Independently assessed the higher qualification threshold"},
+    )
+
+
+def test_equipment_skill_versions_are_immutable_monotonic_and_enforced(
+    scenario: tuple[TestClient, Session],
+) -> None:
+    client, db = scenario
+    s = seed(client)
+    asset = add_test_asset(client, s, "skills-monotonic-23")
+    baseline = add_equipment_skill(client, asset, s["skill"], s["level_low"])
+    assert baseline.status_code == 200, baseline.text
+    first = baseline.json()["required_skills"][0]
+    assert first["version"] == 1 and first["min_ordinal"] == 1
+    verified_skills(client, s, s["level_low"])
+    verified_permit(client, s)
+    work = create_work(client, s, "skills-monotonic-job-23")
+    link_test_asset(client, work, asset)
+    assert check_candidate(client, work, s["person"])["eligible"] is True
+
+    proposals = f"{EQUIPMENT}/assets/{asset['id']}/policy-proposals"
+    history = f"{EQUIPMENT}/assets/{asset['id']}/skill-policy-revisions"
+    assert client.get(history).json()[0]["version"] == 1
+    assert client.post(proposals, headers=auth(client), json={
+        "kind": "skill", "skill_id": s["skill"],
+        "min_level_id": s["level_high"],
+        "reason": "Existing rules must be upgraded, not overwritten",
+    }).status_code == 409
+    assert upgrade_equipment_skill(
+        client, asset, s, s["level_low"], 1,
+    ).status_code == 422
+    assert upgrade_equipment_skill(
+        client, asset, s, s["level_high"], 7,
+    ).status_code == 409
+    assert client.post(proposals, headers=auth(client), json={
+        "kind": "skill_upgrade", "skill_id": s["skill"],
+        "min_level_id": s["level_high"],
+        "reason": "Missing expected version must be rejected",
+    }).status_code == 422
+
+    pending = upgrade_equipment_skill(client, asset, s, s["level_high"], 1)
+    assert pending.status_code == 201, pending.text
+    proposed = pending.json()
+    assert proposed["kind"] == "skill_upgrade"
+    assert proposed["expected_version"] == 1
+    assert upgrade_equipment_skill(
+        client, asset, s, s["level_high"], 1,
+    ).status_code == 409
+    assert client.get(history).json()[0]["version"] == 1
+    assert check_candidate(client, work, s["person"])["eligible"] is True
+
+    url = proposals + "/" + proposed["id"]
+    assert client.post(
+        url + "/approve", headers=auth(client),
+        json={"note": "Author cannot independently approve their own policy"},
+    ).status_code == 403
+    assert client.post(
+        url + "/approve", headers=auth(client, "wm-manager"),
+        json={"note": "Manager role cannot approve asset skill revisions"},
+    ).status_code == 403
+    approved = approve_upgrade(client, asset, proposed)
+    assert approved.status_code == 200, approved.text
+    raised = approved.json()["required_skills"][0]
+    assert raised["version"] == 2 and raised["min_ordinal"] == 3
+    assert raised["min_level_id"] == s["level_high"]
+    assert "EQUIPMENT_SKILL_BELOW_MINIMUM" in blockers(check_candidate(
+        client, work, s["person"]
+    ))
+    revisions = client.get(history).json()
+    assert [r["version"] for r in revisions] == [1, 2]
+    assert [r["min_ordinal"] for r in revisions] == [1, 3]
+    assert revisions[0]["proposal_id"] is None
+    assert revisions[1]["proposal_id"] == proposed["id"]
+    assert revisions[1]["approved_by"] != proposed["proposed_by"]
+    assert client.post(
+        url + "/approve", headers=auth(client, "wm-reviewer"),
+        json={"note": "A decision cannot be replayed a second time"},
+    ).status_code == 409
+    assert upgrade_equipment_skill(
+        client, asset, s, s["level_high"], 2,
+    ).status_code == 422
+    assert upgrade_equipment_skill(
+        client, asset, s, s["level_high"], 1,
+    ).status_code == 409
+    verified_skills(client, s, s["level_high"])
+    assert check_candidate(client, work, s["person"])["eligible"] is True
+    from app.equipment.models import AssetSkillRequirement, AssetSkillPolicyRevision
+    base = db.scalar(select(AssetSkillRequirement).where(
+        AssetSkillRequirement.asset_id == UUID(asset["id"]),
+    ))
+    assert base.min_level_id == UUID(s["level_low"])
+    persisted = db.scalars(select(AssetSkillPolicyRevision)).all()
+    assert len(persisted) == 1 and persisted[0].version == 2
+
+
+def test_rejected_upgrade_keeps_existing_threshold_and_live_approval_forces_hold(
+    scenario: tuple[TestClient, Session], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _db = scenario
+    s = seed(client)
+    verified_skills(client, s, s["level_low"])
+    verified_permit(client, s)
+    asset = add_test_asset(client, s, "skills-live-23")
+    assert add_equipment_skill(
+        client, asset, s["skill"], s["level_low"],
+    ).status_code == 200
+    work = create_work(client, s, "skills-live-work-23")
+    link_test_asset(client, work, asset)
+    assert assign(client, work, s["person"]).status_code == 200
+    permit = prepare_test_permit(client, work)
+    assert permit_transition(client, work, permit, "submit").status_code == 200
+    assert permit_transition(
+        client, work, permit, "approve", "wm-reviewer",
+    ).status_code == 200
+    planned = datetime.fromisoformat(work["starts_at"])
+    monkeypatch.setattr(work_service, "utcnow", lambda: planned + timedelta(minutes=5))
+    assert client.post(
+        f"{BASE}/orders/{work['id']}/start", headers=auth(client),
+    ).status_code == 200
+
+    rejected = upgrade_equipment_skill(client, asset, s, s["level_high"], 1)
+    assert rejected.status_code == 201, rejected.text
+    endpoint = f"{EQUIPMENT}/assets/{asset['id']}/policy-proposals/"
+    assert client.post(
+        endpoint + rejected.json()["id"] + "/reject",
+        headers=auth(client, "wm-reviewer"),
+        json={"note": "Rejected: training assessment is not yet authorized"},
+    ).status_code == 200
+    assert client.get(f"{BASE}/orders/{work['id']}").json()["status"] == "in_progress"
+    assert client.get(
+        f"{EQUIPMENT}/assets/{asset['id']}/skill-policy-revisions",
+    ).json()[0]["version"] == 1
+
+    pending = upgrade_equipment_skill(client, asset, s, s["level_high"], 1)
+    assert pending.status_code == 201, pending.text
+    assert client.get(f"{BASE}/orders/{work['id']}").json()["status"] == "in_progress"
+    approved = approve_upgrade(client, asset, pending.json())
+    assert approved.status_code == 200, approved.text
+    assert client.get(f"{BASE}/orders/{work['id']}").json()["status"] == "on_hold"
+    denied = client.post(
+        f"{BASE}/orders/{work['id']}/resume", headers=auth(client),
+        json={"reason": "Credential increased and requires a new independent skill check"},
+    )
+    assert denied.status_code == 409
+    assert "EQUIPMENT_SKILL_BELOW_MINIMUM" in str(denied.json())
+    assert approved.json()["required_skills"][0]["version"] == 2
+
+
+def test_skill_upgrade_multiple_versions_and_authorization(
+    scenario: tuple[TestClient, Session],
+) -> None:
+    client, _db = scenario
+    s = seed(client)
+    levels = client.get(
+        f"/api/v1/competence/enterprises/{s['enterprise']}/scales"
+    ).json()[0]["levels"]
+    level_zero = next(r["id"] for r in levels if r["ordinal"] == 0)
+    asset = add_test_asset(client, s, "skills-three-versions-23")
+    assert add_equipment_skill(client, asset, s["skill"], level_zero).status_code == 200
+    endpoint = f"{EQUIPMENT}/assets/{asset['id']}/skill-policy-revisions"
+    assert client.get(endpoint).json()[0]["min_ordinal"] == 0
+    for expected, level in [(1, s["level_low"]), (2, s["level_high"])]:
+        proposed = upgrade_equipment_skill(client, asset, s, level, expected)
+        assert proposed.status_code == 201, proposed.text
+        approved = approve_upgrade(client, asset, proposed.json())
+        assert approved.status_code == 200
+        assert approved.json()["required_skills"][0]["version"] == expected + 1
+    history = client.get(endpoint).json()
+    assert [x["version"] for x in history] == [1, 2, 3]
+    assert [x["min_ordinal"] for x in history] == [0, 1, 3]
+    assert len({x["min_level_id"] for x in history}) == 3
+    auth(client, "wm-viewer")
+    assert client.get(endpoint).status_code == 403
+    auth(client, "wm-manager")
+    assert client.get(endpoint).status_code == 403
+    auth(client)
+    assert client.get(
+        f"{EQUIPMENT}/assets/{s['foreign_person']}/skill-policy-revisions"
+    ).status_code == 404

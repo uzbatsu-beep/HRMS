@@ -23,6 +23,7 @@ const labels: Record<string, string> = {
   "asset.state_changed": "Состояние оборудования изменено",
   "asset.credential_required": "Добавлен обязательный допуск",
   "asset.skill_required": "Добавлена обязательная компетенция",
+  "asset.skill_threshold_raised": "Повышен обязательный уровень компетенции",
   "asset.downtime_scheduled": "Зарегистрировано обслуживание",
   "asset.downtime_cancelled": "Обслуживание отменено",
   "work.equipment_linked": "Оборудование связано с нарядом",
