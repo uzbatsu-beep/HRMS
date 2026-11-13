@@ -1,0 +1,54 @@
+# Disposable, isolated E2E stack. Never mount the normal TWM database volume.
+# Required: E2E_DB_PASSWORD. External ports differ from the development stack.
+name: twm-e2e
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: twm_e2e
+      POSTGRES_USER: twm_e2e
+      POSTGRES_PASSWORD: ${E2E_DB_PASSWORD:?Set E2E_DB_PASSWORD for the isolated test database}
+    volumes:
+      - e2e_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U twm_e2e -d twm_e2e"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      TWM_APP_ENV: test
+      TWM_DATABASE_URL: postgresql+psycopg://twm_e2e:${E2E_DB_PASSWORD:?Set E2E_DB_PASSWORD}@db:5432/twm_e2e
+      TWM_CORS_ALLOWED_ORIGINS: http://localhost:5174,http://127.0.0.1:5174
+    command: ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+    ports:
+      - "127.0.0.1:8001:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/ready', timeout=3)"]
+      interval: 5s
+      timeout: 4s
+      retries: 15
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    environment:
+      VITE_API_PROXY_TARGET: http://backend:8000
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+    ports:
+      - "127.0.0.1:5174:5173"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  e2e_postgres_data:
