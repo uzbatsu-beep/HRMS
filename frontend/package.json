@@ -1,4 +1,3 @@
-
 {
   "name": "twm-frontend",
   "private": true,
@@ -7,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "check": "tsc --noEmit",
-    "build": "tsc --noEmit && vite build"
+    "build": "tsc --noEmit && vite build",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed"
   },
   "dependencies": {
     "react": "^19.0.0",
@@ -18,6 +19,8 @@
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^5.0.0",
     "typescript": "^5.8.0",
-    "vite": "^7.0.0"
+    "vite": "^7.0.0",
+    "@playwright/test": "^1.56.1",
+    "@types/node": "^22.15.0"
   }
 }
