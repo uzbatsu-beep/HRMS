@@ -139,3 +139,28 @@ Development/test-only. Do not load real personnel or certificate data.
 work order transaction enforcement, effective-dated policy publication,
 machine-specific credential applicability, notifications and production identity.
 Do not load real HR or high-risk safety permit data.
+
+
+## PR #9 — Availability & Scheduling (Phase 6)
+
+Implemented:
+- Per-resource weekly ShiftRule with IANA timezone, effective date range,
+  overnight shift support and non-destructive disable.
+- Enterprise CalendarClosure for explicit local holidays or shutdown days.
+- UTC-aware half-open AbsencePeriod and WorkReservation with cancellations.
+- Fail-closed availability policy requiring one shift, active resource,
+  full primary assignment, no closure, no absence and no conflicting booking.
+- Ambiguous/nonexistent DST boundaries rejected; no guessed local offset.
+- Transactional enterprise lock plus availability recheck for planned bookings.
+- Organization-scoped read permissions; linked self-read; admin-only
+  CSRF-protected writes and audit trail.
+- Planned booked minutes, absence minutes and reservation count (not FTE
+  utilization or payroll).
+- React scheduling control panel with checks, shifts, closures, absences
+  and reservations; PostgreSQL migration `0007_availability`; tests,
+  ADR-0007 and README guidance.
+
+Known gaps: no legal labor-law calendar, no actual WorkOrder assignment,
+no machine authorization, no automatic conflict escalation after changed
+leave/holiday/schedules, no manager leave approvals and no production privacy
+or authentication hardening. Development/test and synthetic records only.
