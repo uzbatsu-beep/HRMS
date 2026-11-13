@@ -116,7 +116,8 @@ export default function AuthPanel() {
       }
       const created = (await response.json()) as User;
       setCreateMessage(`Пользователь ${created.username} создан.`);
-      window.dispatchEvent(new Event("twm-auth-changed"));
+      // User creation changes the directory, not the logged-in session.
+      // Avoid clearing the operator's enterprise/department/person context.
       setNewUsername("");
       setNewPassword("");
       setNewRole("viewer");
