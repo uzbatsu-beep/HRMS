@@ -109,3 +109,32 @@ test("reading the access page and creating a user preserves workplace filters", 
   await expect(page.locator("#personnel .people-filters select").nth(1))
     .toHaveValue(seed.units.automation);
 });
+
+
+test("new enterprise is confirmed by server scope then selected across modules", async ({ page }) => {
+  await loginUI(page);
+  await page.goto("/#organization");
+  const name = "E2E Второй завод " + Date.now().toString(36);
+  const code = "e2e-added-" + Date.now().toString(36);
+  const details = page.locator("details.org-details").filter({
+    hasText: "Создать предприятие",
+  });
+  await details.locator("summary").click();
+  const form = details.locator("form");
+  await form.getByLabel("Код").fill(code);
+  await form.getByLabel("Название").fill(name);
+  await form.getByRole("button", { name: "Создать" }).click();
+  await expect(page.locator(".org-feedback")).toContainText("Предприятие создано");
+  const companies = await page.request.get("/api/v1/org/enterprises");
+  expect(companies.ok()).toBeTruthy();
+  const created = (await companies.json() as { code: string; id: string }[])
+    .find((row) => row.code === code);
+  expect(created).toBeDefined();
+  await expect(page.locator(".workspace-rail").getByLabel("Предприятие"))
+    .toHaveValue(created!.id);
+  await page.locator(".workspace-navigation").getByRole("link", {
+    name: /Персонал/,
+  }).click();
+  await expect(page.locator("#personnel").getByLabel("Предприятие"))
+    .toHaveValue(created!.id);
+});
