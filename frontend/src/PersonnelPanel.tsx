@@ -50,7 +50,12 @@ async function request<T>(path: string, init: RequestInit = {}, csrf?: string): 
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-export default function PersonnelPanel() {
+export default function PersonnelPanel({
+  contextEnterpriseId, focusedPersonId,
+}: {
+  contextEnterpriseId?: string;
+  focusedPersonId?: string;
+} = {}) {
   const [authRevision, setAuthRevision] = useState(0);
   const [session, setSession] = useState<Session | null>(null);
   const [enterprises, setEnterprises] = useState<Enterprise[]>([]);
@@ -127,17 +132,22 @@ export default function PersonnelPanel() {
       .then((records) => {
         if (!active) return;
         setEnterprises(records);
-        setEnterpriseId((previous) => records.some((item) => item.id === previous)
-          ? previous : records[0]?.id ?? "");
+        setEnterpriseId((previous) => {
+          const requested = contextEnterpriseId && records.some(
+            (item) => item.id === contextEnterpriseId,
+          ) ? contextEnterpriseId : previous;
+          return records.some((item) => item.id === requested)
+            ? requested : records[0]?.id ?? "";
+        });
       })
       .catch((reason: unknown) => {
         if (active) setError(reason instanceof Error ? reason.message : "Ошибка API");
       });
     return () => { active = false; };
-  }, [session?.user.id, refresh]);
+  }, [session?.user.id, refresh, contextEnterpriseId]);
 
   useEffect(() => {
-    setSelectedId("");
+    setSelectedId(focusedPersonId ?? "");
     setDetail(null);
     setUnitFilter("");
     if (!session || !enterpriseId) {
@@ -152,7 +162,7 @@ export default function PersonnelPanel() {
         if (active) setError(reason instanceof Error ? reason.message : "Ошибка подразделений");
       });
     return () => { active = false; };
-  }, [enterpriseId, session?.user.id]);
+  }, [enterpriseId, session?.user.id, focusedPersonId]);
 
   useEffect(() => {
     if (!session || !enterpriseId) return;
