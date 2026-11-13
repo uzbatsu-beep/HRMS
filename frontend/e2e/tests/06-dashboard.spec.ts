@@ -35,6 +35,8 @@ test("viewer receives only scoped analytics", async ({ page }) => {
   const seed = demo();
   await loginUI(page, seed.users.viewer, process.env.E2E_ACTOR_PASSWORD);
   await page.goto("/#dashboard");
+  const rail = page.locator(".workspace-rail");
+  await rail.getByRole("button", { name: /E2E Механики/ }).click();
   const report = page.locator(".ops-dashboard");
   await expect(report).toBeVisible();
   await expect(report).toContainText("E2E Механики");
