@@ -87,12 +87,21 @@ Acceptance: scoped cross-enterprise/unit reads, empty/zero cases, inactive
 resources, expiry boundaries, cancelled bookings, dashboard navigation, account
 switching and CI checks. Do not mark complete before test evidence.
 
-### PR #16 — Configurator and governed workflow
+### PR #16 — Configurator and governed workflow (in review)
 
-Support enterprise-configurable dictionaries, additional fields, rules and
-workflow transitions with draft/validate/publish, effective dates, versioned
-history and explicit approval. Prevent configuration from bypassing mandatory
-credentials, personnel scopes or audit invariants.
+First governed vertical slice: enterprise-specific custom metadata for Person
+profiles (text, integer, boolean, controlled-choice dictionary). Draft versions
+have strict declarative validation, independent administrator approval,
+effective-date publication and immutable published history. Person field updates
+store immutable revisions and apply only the effective published schema.
+Backend RBAC remains authoritative; new fields are informational and are never
+used for safety qualification, credentials, authorization or work-order gates.
+See `docs/adr/0012-governed-configuration.md`.
+
+Remaining PR #16/Phase 8 backlog: domain workflow transition configurability,
+general custom attributes for additional entities, a catalog governance UI for
+existing domain dictionaries, per-field reporting, multi-enterprise delegation
+and revision comparison. These are *not* implemented in this slice.
 
 ### PR #17 — Equipment, work permits and safety workflow
 

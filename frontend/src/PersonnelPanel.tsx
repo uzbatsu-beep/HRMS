@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useWorkspace } from "./WorkspaceContext";
+import PersonCustomFields from "./PersonCustomFields";
 
 type Session = {
   user: { id: string; username: string; role: "admin" | "manager" | "viewer" };
@@ -447,6 +448,7 @@ export default function PersonnelPanel() {
                   {detail.archived_at ? "Архив" : "Действующий"}
                 </strong></div>
               </div>
+              <PersonCustomFields personId={detail.id} archived={Boolean(detail.archived_at)} />
               <h4>История организационных назначений</h4>
               <div className="people-history">
                 {detail.assignments.map((item) => (

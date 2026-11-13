@@ -939,3 +939,37 @@ h2 { margin: 6px 0 0; font-size: 18px; letter-spacing: -.025em; }
 @media (max-width: 1150px) { .ops-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 700px) { .ops-section-grid { grid-template-columns: 1fr; } .ops-dashboard-header { align-items: flex-start; flex-direction: column; } }
 @media (max-width: 480px) { .ops-kpi-grid { grid-template-columns: 1fr; } }
+
+
+/* PR #16: governed configurator / controlled personnel attributes */
+
+.config-panel, .config-person-fields { border: 1px solid var(--line); border-radius: 12px; padding: 18px; background: var(--panel); color: var(--ink); }
+.config-panel { display: grid; gap: 17px; }
+.config-panel h2 { font-size: 20px; }
+.config-panel h3, .config-person-fields h4 { font-size: 14px; margin: 0 0 9px; }
+.config-panel p, .config-person-fields p { color: #667671; font-size: 11px; line-height: 1.7; }
+.config-heading { display: flex; justify-content: space-between; gap: 18px; align-items: start; }
+.config-heading > div { min-width: 0; }
+.config-published { padding: 13px 16px; background: #edf5f1; border: 1px solid #d8e9e1; border-radius: 9px; font-size: 12px; }
+.config-toolbar, .config-actions { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; }
+.config-panel label, .config-person-fields label { display: flex; flex-direction: column; gap: 5px; min-width: 140px; font-size: 11px; color: #52645d; }
+.config-panel input, .config-panel select, .config-person-fields input:not([type="checkbox"]), .config-person-fields select { width: 100%; min-height: 35px; background: #fff; border: 1px solid #d6e1dc; padding: 7px 10px; border-radius: 7px; color: #253f35; font: inherit; }
+.config-panel input:disabled, .config-panel select:disabled { background: #f3f5f4; color: #6d7f77; }
+.config-panel button, .config-person-fields button { cursor: pointer; border: 1px solid #c5dcd2; border-radius: 7px; background: #e8f3ef; color: #176e60; padding: 8px 13px; font-size: 11px; font-weight: 650; }
+.config-panel button:disabled, .config-person-fields button:disabled { opacity: .55; cursor: not-allowed; }
+.config-panel button[type="submit"], .config-workflow button:not([type="button"]) { background: #176e60; color: #fff; }
+.config-form, .config-workflow, .config-readonly { border: 1px solid var(--line); border-radius: 10px; padding: 17px; }
+.config-field { border: 1px solid var(--line); border-radius: 8px; padding: 14px; margin: 12px 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: end; }
+.config-field legend { font-weight: 700; font-size: 11px; }
+.config-field .config-checkbox { flex-direction: row; align-items: center; }
+.config-field .config-checkbox input { width: 16px; height: 16px; }
+.config-workflow { display: grid; gap: 12px; justify-items: start; }
+.config-person-fields { margin: 15px 0 19px; background: #f8faf9; }
+.config-person-fields form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.config-person-fields form button { align-self: end; }
+.config-error { padding: 10px; background: #fff0ee; border-radius: 6px; color: #a0463e !important; }
+.config-notice { padding: 10px; background: #edf8ef; border-radius: 6px; color: #176e60 !important; }
+@media (max-width: 780px) {
+  .config-field, .config-person-fields form { grid-template-columns: 1fr; }
+  .config-heading { flex-direction: column; }
+}
