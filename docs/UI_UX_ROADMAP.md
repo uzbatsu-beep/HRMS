@@ -205,3 +205,20 @@ This is an application activity history, not a tamper-proof legal audit trail
 or evidence of machine actions. ADR-0017 describes limitations and tests.
 Follow-up: certified retention/log integrity, domain policy governance,
 permissions matrix, company-scoped admin delegation.
+
+
+### PR #22 — Independent Equipment Policy Governance (in review)
+
+New equipment-specific skill/credential requirements require a submitted,
+pending policy proposal and approval or rejection by **a different admin**.
+The proposer supplies a substantive justification; the reviewer supplies a
+reasoned decision. Pending or rejected policy proposals NEVER affect work
+matching, asset qualifications or running work. Approval revalidates tenant,
+skill/level and type, then atomically activates the additive rule and places
+linked in-progress work on application-only hold for explicit reauthorization.
+The legacy direct-write APIs are disabled (409) to prevent bypass.
+
+Existing active requirements survive migration and are not converted into
+fabricated approvals. Post-approval weakening, version replacement,
+certified PTW, paper signatures and PLC safety are still outside scope.
+See docs/adr/0018-equipment-policy-governance.md.

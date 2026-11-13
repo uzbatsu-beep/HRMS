@@ -42,7 +42,43 @@ test("asset skill gates persist and scoped readiness shows permit blockers", asy
 
   await panel.getByLabel("Компетенция оборудования").selectOption(skill.id);
   await panel.getByLabel("Уровень компетенции оборудования").selectOption(high!.id);
-  await panel.getByRole("button", { name: "Добавить требование к навыку" }).click();
+  await panel.getByLabel("Обоснование нового требования (не менее 10 символов)")
+    .fill("Synthetic independently governed robot qualification requirement");
+  await panel.getByRole("button", { name: "Предложить требование к навыку" }).click();
+  await expect(panel.locator(".equipment-policy")).toContainText(
+    "Ожидает утверждения",
+  );
+  const endpoint = "/api/v1/equipment/assets/" + asset!.id + "/policy-proposals";
+  const proposals = await page.request.get(endpoint);
+  const pending = (await proposals.json() as {
+    id: string; skill_id: string; status: string;
+  }[]).find(x => x.skill_id === skill.id && x.status === "pending");
+  expect(pending).toBeDefined();
+  const before = await page.request.get(
+    "/api/v1/equipment/enterprises/" + seed.enterprise.id + "/assets",
+  );
+  const notActive = (await before.json() as {
+    id: string; required_skills: unknown[];
+  }[]).find(x => x.id === asset!.id);
+  expect(notActive?.required_skills).toHaveLength(0);
+
+  const reviewer = await request.newContext({ baseURL: new URL(page.url()).origin });
+  try {
+    const login = await reviewer.post("/api/v1/auth/login", {
+      data: { username: seed.users.reviewer,
+        password: process.env.E2E_ACTOR_PASSWORD },
+    });
+    expect(login.ok()).toBeTruthy();
+    const reviewerCsrf = (await login.json() as { csrf_token: string }).csrf_token;
+    const approval = await reviewer.post(endpoint + "/" + pending!.id + "/approve", {
+      headers: { "X-CSRF-Token": reviewerCsrf },
+      data: { note: "Independent reviewer approves synthetic robot skill requirement" },
+    });
+    expect(approval.status()).toBe(200);
+  } finally {
+    await reviewer.dispose();
+  }
+  await panel.getByRole("button", { name: "Обновить", exact: true }).click();
   await expect(panel.locator(".equipment-detail")).toContainText("уровень ≥ 3");
   const again = await page.request.get(
     "/api/v1/equipment/enterprises/" + seed.enterprise.id + "/assets",

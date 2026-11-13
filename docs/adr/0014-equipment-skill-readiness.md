@@ -63,3 +63,11 @@ engineering and legal review.
 - Last approved rating, policy addition during execution and hold/resume flow.
 - Readiness totals, error cases and scope; Playwright rendering and save path.
 - Ruff lint, complete Pytest suite, TypeScript/Vite, Chromium E2E.
+
+
+### Superseded creation path (PR #22)
+
+The direct admin add routes described above were intentionally disabled by
+PR #22 (409); all **new** requirements now use independently approved policy
+proposals. Existing active requirements remain effective. For enforced
+approval and migration semantics see ADR-0018.

@@ -9,7 +9,7 @@ export type DemoSeed = {
   units: { root: string; automation: string; mechanics: string };
   people: { lead: Person; crew: Person; unqualified: Person; otherUnit: Person };
   credentials: { lead: string; crew: string };
-  users: { manager: string; viewer: string };
+  users: { reviewer: string; manager: string; viewer: string };
   work: { id: string; code: string; starts_at: string; ends_at: string };
 };
 
@@ -198,7 +198,7 @@ export default async function globalSetup(): Promise<void> {
       enterprise, units: { root: root.id, automation: automation.id, mechanics: mechanics.id },
       people: { lead, crew, unqualified, otherUnit },
       credentials: { lead: leadCredential, crew: crewCredential },
-      users: { manager: managerName, viewer: viewerName }, work,
+      users: { reviewer: reviewerName, manager: managerName, viewer: viewerName }, work,
     };
     await mkdir(dirname(output), { recursive: true });
     await writeFile(output, JSON.stringify(seed, null, 2), { mode: 0o600 });
