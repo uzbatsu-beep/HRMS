@@ -16,6 +16,7 @@ from app.identity.security import hash_password
 from app.main import app
 from app.availability.models import WorkReservation
 from app.credentials.models import PersonCredential
+from app.personnel.models import EmploymentAssignment, WorkforceResource
 from app.work.models import WorkAuditEvent, WorkOrder, WorkOrderAssignment
 from app.work import service as work_service
 
@@ -589,3 +590,39 @@ def test_cross_enterprise_work_is_invisible_and_requires_csrf(
     ).status_code == 409
     auth(client, "wm-viewer")
     assert client.get(f"{BASE}/orders/{work['id']}").status_code == 404
+
+
+def test_future_transfer_does_not_expose_out_of_scope_worker(
+    scenario: tuple[TestClient, Session],
+) -> None:
+    client, db = scenario
+    s = seed(client)
+    resource = db.scalar(
+        select(WorkforceResource).where(WorkforceResource.person_id == UUID(s["foreign_person"]))
+    )
+    assert resource is not None
+    assignment = db.scalar(
+        select(EmploymentAssignment).where(EmploymentAssignment.resource_id == resource.id)
+    )
+    assert assignment is not None
+    assignment.effective_to = monday() - timedelta(days=1)
+    db.add(EmploymentAssignment(
+        enterprise_id=UUID(s["enterprise"]), resource_id=resource.id,
+        unit_id=UUID(s["unit"]), effective_from=monday(),
+    ))
+    db.commit()
+    order = create_work(client, s, "future-transfer")
+    auth(client)
+    users = client.get("/api/v1/auth/users").json()
+    manager = next(item for item in users if item["username"] == "wm-manager")
+    post(client, "/api/v1/org/scopes", {
+        "user_id": manager["id"], "unit_id": s["unit"],
+        "include_descendants": True,
+    })
+    auth(client, "wm-manager")
+    response = client.get(f"{BASE}/orders/{order['id']}/candidates")
+    assert response.status_code == 200, response.text
+    assert s["foreign_person"] not in {x["person_id"] for x in response.json()}
+    assert client.get(
+        f"{BASE}/orders/{order['id']}/candidates/{s['foreign_person']}"
+    ).status_code == 404
