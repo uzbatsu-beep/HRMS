@@ -124,7 +124,7 @@ test("new enterprise is confirmed by server scope then selected across modules",
   await form.getByLabel("Код").fill(code);
   await form.getByLabel("Название").fill(name);
   await form.getByRole("button", { name: "Создать" }).click();
-  await expect(page.locator(".org-feedback")).toContainText("Предприятие создано");
+  await expect(page.locator(".org-success")).toContainText("Предприятие создано");
   const companies = await page.request.get("/api/v1/org/enterprises");
   expect(companies.ok()).toBeTruthy();
   const created = (await companies.json() as { code: string; id: string }[])
