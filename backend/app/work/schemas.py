@@ -107,7 +107,7 @@ class WorkView(BaseModel):
 
 
 class Blocker(BaseModel):
-    source: Literal["person", "organization", "skill", "credential", "calendar"]
+    source: Literal["person", "organization", "skill", "credential", "calendar", "equipment"]
     code: str
     message: str
 
@@ -145,6 +145,7 @@ class SafetyCheck(BaseModel):
     status: str
     passed: bool
     members: list[SafetyMember]
+    equipment_blockers: list[Blocker] = Field(default_factory=list)
 
 
 class PriorityChange(BaseModel):

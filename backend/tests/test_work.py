@@ -1004,3 +1004,238 @@ def test_invalid_crew_at_completion_persists_safety_hold_without_finishing(
     assert "safety.hold" in {
         event.action for event in db.scalars(select(WorkAuditEvent)).all()
     }
+
+
+# PR #17 — linked equipment, credential AND-gates and independent permit workflow.
+
+EQUIPMENT = "/api/v1/equipment"
+
+
+def add_test_asset(client: TestClient, s: dict, code: str = "machine-17") -> dict:
+    return post(client, f"{EQUIPMENT}/enterprises/{s['enterprise']}/assets", {
+        "unit_id": s["unit"], "code": code, "name": "Synthetic casting press",
+        "kind": "machine", "serial_number": "SYNTHETIC-000",
+    })
+
+
+def link_test_asset(client: TestClient, work: dict, asset: dict) -> dict:
+    return post(client, f"{EQUIPMENT}/orders/{work['id']}/equipment", {
+        "asset_id": asset["id"],
+    })
+
+
+def prepare_test_permit(
+    client: TestClient, work: dict, *,
+    checks: bool = True, who: str = "wm-admin",
+) -> dict:
+    return post(client, f"{EQUIPMENT}/orders/{work['id']}/permit", {
+        "hazards_reviewed": checks,
+        "energy_isolation_attested": checks,
+        "area_access_attested": checks,
+        "evidence_reference": "SYNTHETIC-EVIDENCE-001",
+    }, who)
+
+
+def permit_transition(
+    client: TestClient, work: dict, permit: dict,
+    action: str, who: str = "wm-admin", payload: dict | None = None,
+):
+    return client.post(
+        f"{EQUIPMENT}/orders/{work['id']}/permit/{permit['id']}/{action}",
+        headers=auth(client, who), json=payload,
+    )
+
+
+def test_equipment_requires_independent_permit_and_extra_credential(
+    scenario: tuple[TestClient, Session], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, db = scenario
+    s = seed(client)
+    asset = add_test_asset(client, s)
+    extra = post(
+        client, f"/api/v1/credentials/enterprises/{s['enterprise']}/types", {
+            "code": "machine-isolation", "name": "Machine-specific training",
+            "kind": "training", "is_safety_critical": False,
+            "requires_expiry": True,
+        },
+    )
+    requirement = client.post(
+        f"{EQUIPMENT}/assets/{asset['id']}/required-credentials",
+        headers=auth(client), json={"type_id": extra["id"]},
+    )
+    assert requirement.status_code == 201, requirement.text
+    verified_skills(client, s)
+    verified_permit(client, s)
+    work = create_work(client, s, "equipment-safety-17")
+    attached = link_test_asset(client, work, asset)
+    assert attached["asset"]["id"] == asset["id"]
+    assert attached["equipment_blockers"] == ["WORK_PERMIT_NOT_APPROVED"]
+
+    missing = check_candidate(client, work, s["person"])
+    assert "EQUIPMENT_CREDENTIAL_MISSING" in blockers(missing)
+    assert assign(client, work, s["person"]).status_code == 409
+
+    verified_permit(client, {**s, "permit": extra["id"]})
+    assigned = assign(client, work, s["person"])
+    assert assigned.status_code == 200, assigned.text
+    planned = datetime.fromisoformat(work["starts_at"])
+    monkeypatch.setattr(work_service, "utcnow", lambda: planned + timedelta(minutes=5))
+    denied = client.post(
+        f"{BASE}/orders/{work['id']}/start", headers=auth(client),
+    )
+    assert denied.status_code == 409
+    assert "WORK_PERMIT_NOT_APPROVED" in {
+        x["code"] for x in denied.json()["detail"]["equipment_blockers"]
+    }
+    permit = prepare_test_permit(client, work)
+    assert permit_transition(client, work, permit, "approve", "wm-reviewer").status_code == 409
+    assert permit_transition(client, work, permit, "submit").status_code == 200
+    assert permit_transition(client, work, permit, "approve").status_code == 403
+    assert permit_transition(client, work, permit, "approve", "wm-reviewer").status_code == 200
+    assert client.post(
+        f"{BASE}/orders/{work['id']}/start", headers=auth(client),
+    ).status_code == 200
+
+    off = client.post(
+        f"{EQUIPMENT}/assets/{asset['id']}/state", headers=auth(client),
+        json={"status": "out_of_service", "reason": "Synthetic isolation failure review"},
+    )
+    assert off.status_code == 200
+    assert client.get(f"{BASE}/orders/{work['id']}").json()["status"] == "on_hold"
+    assert client.post(
+        f"{BASE}/orders/{work['id']}/resume", headers=auth(client),
+        json={"reason": "Synthetic test confirms all gates again"},
+    ).status_code == 409
+
+    on = client.post(
+        f"{EQUIPMENT}/assets/{asset['id']}/state", headers=auth(client),
+        json={"status": "active", "reason": "Synthetic equipment restored for test"},
+    )
+    assert on.status_code == 200
+    assert client.post(
+        f"{BASE}/orders/{work['id']}/resume", headers=auth(client),
+        json={"reason": "Synthetic verification of asset reinstatement"},
+    ).status_code == 200
+
+    revoked = permit_transition(
+        client, work, permit, "revoke", "wm-reviewer",
+        {"reason": "Permit withdrawn for synthetic safety test"},
+    )
+    assert revoked.status_code == 200, revoked.text
+    assert client.get(f"{BASE}/orders/{work['id']}").json()["status"] == "on_hold"
+    assert client.post(
+        f"{BASE}/orders/{work['id']}/resume", headers=auth(client),
+        json={"reason": "Deliberately invalid previous permit no override"},
+    ).status_code == 409
+    replacement = prepare_test_permit(client, work)
+    assert replacement["version"] == 2
+    assert permit_transition(client, work, replacement, "submit").status_code == 200
+    assert permit_transition(client, work, replacement, "approve", "wm-reviewer").status_code == 200
+    assert client.post(
+        f"{BASE}/orders/{work['id']}/resume", headers=auth(client),
+        json={"reason": "Synthetic replacement approval now in effect"},
+    ).status_code == 200
+    assert db.scalars(select(WorkOrder)).first() is not None
+
+
+def test_equipment_scope_and_permit_rejection(
+    scenario: tuple[TestClient, Session],
+) -> None:
+    client, db = scenario
+    s = seed(client)
+    asset = add_test_asset(client, s, "machine-permissions")
+    foreign = post(client, "/api/v1/org/enterprises", {
+        "code": "equipment-foreign", "name": "Foreign company",
+    })["id"]
+    work = create_work(client, s, "permit-auth-17")
+    assert client.post(
+        f"{EQUIPMENT}/orders/{work['id']}/equipment",
+        headers=auth(client), json={"asset_id": s["foreign_person"]},
+    ).status_code == 404
+    assert client.post(
+        f"{EQUIPMENT}/orders/{work['id']}/equipment",
+        json={"asset_id": asset["id"]},
+    ).status_code == 403
+    assert link_test_asset(client, work, asset)["asset"]["code"] == "machine-permissions"
+    assert client.post(
+        f"{EQUIPMENT}/orders/{work['id']}/equipment",
+        headers=auth(client), json={"asset_id": asset["id"]},
+    ).status_code == 409
+    assert client.get(
+        f"{EQUIPMENT}/enterprises/{foreign}/assets",
+    ).status_code == 200
+
+    invalid = prepare_test_permit(client, work, checks=False)
+    assert permit_transition(client, work, invalid, "submit").status_code == 409
+    assert permit_transition(
+        client, work, invalid, "revoke", "wm-reviewer",
+        {"reason": "Incomplete synthetic hazard checklist"},
+    ).status_code == 200
+    valid = prepare_test_permit(client, work)
+    assert permit_transition(client, work, valid, "submit").status_code == 200
+
+    auth(client, "wm-viewer")
+    assert client.get(
+        f"{EQUIPMENT}/orders/{work['id']}/safety-package",
+    ).status_code == 404
+    assert client.post(
+        f"{EQUIPMENT}/orders/{work['id']}/permit/{valid['id']}/approve",
+        headers=auth(client, "wm-viewer"),
+    ).status_code == 403
+    assert client.get(
+        f"{EQUIPMENT}/enterprises/{s['enterprise']}/assets",
+    ).status_code == 404
+    auth(client)
+    assert client.get(
+        f"{EQUIPMENT}/enterprises/{s['enterprise']}/assets",
+    ).status_code == 200
+    assert db.scalars(select(WorkAuditEvent)).all()
+
+
+def test_new_asset_requirement_places_active_work_on_software_hold(
+    scenario: tuple[TestClient, Session], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, db = scenario
+    s = seed(client)
+    verified_skills(client, s)
+    verified_permit(client, s)
+    asset = add_test_asset(client, s, "machine-policy-17")
+    work = create_work(client, s, "asset-policy-17")
+    link_test_asset(client, work, asset)
+    assert assign(client, work, s["person"]).status_code == 200
+    permit = prepare_test_permit(client, work)
+    assert permit_transition(client, work, permit, "submit").status_code == 200
+    assert permit_transition(client, work, permit, "approve", "wm-reviewer").status_code == 200
+    planned = datetime.fromisoformat(work["starts_at"])
+    monkeypatch.setattr(work_service, "utcnow", lambda: planned + timedelta(minutes=5))
+    assert client.post(
+        f"{BASE}/orders/{work['id']}/start", headers=auth(client),
+    ).status_code == 200
+
+    extra = post(
+        client, f"/api/v1/credentials/enterprises/{s['enterprise']}/types", {
+            "code": "robot-hv", "name": "Additional machine requirement",
+            "kind": "training", "requires_expiry": True, "is_safety_critical": False,
+        },
+    )
+    changed = client.post(
+        f"{EQUIPMENT}/assets/{asset['id']}/required-credentials",
+        json={"type_id": extra["id"]}, headers=auth(client),
+    )
+    assert changed.status_code == 201, changed.text
+    assert client.get(
+        f"{BASE}/orders/{work['id']}"
+    ).json()["status"] == "on_hold"
+    denied = client.post(
+        f"{BASE}/orders/{work['id']}/resume",
+        headers=auth(client),
+        json={"reason": "Attempt to resume without the extra certificate"},
+    )
+    assert denied.status_code == 409
+    assert "EQUIPMENT_CREDENTIAL_MISSING" in str(denied.json())
+    verified_permit(client, {**s, "permit": extra["id"]})
+    assert client.post(
+        f"{BASE}/orders/{work['id']}/resume",
+        headers=auth(client),
+        json={"reason": "Synthetic follow-up credential now independently verified"},
+    ).status_code == 200

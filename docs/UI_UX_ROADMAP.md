@@ -103,12 +103,23 @@ general custom attributes for additional entities, a catalog governance UI for
 existing domain dictionaries, per-field reporting, multi-enterprise delegation
 and revision comparison. These are *not* implemented in this slice.
 
-### PR #17 — Equipment, work permits and safety workflow
+### PR #17 — Equipment, work permits and safety workflow (in review)
 
-Link WorkOrders to machines/assets, skills and credentials applicable to
-specific equipment, human approvals, documentary evidence, controlled
-site checks, and permit-to-work workflows. Formal compliance and equipment
-interlocks require specialist review and separate engineering governance.
+Equipment assets and append-only equipment-specific credential policies, an
+immutable asset-to-WorkOrder link (before staffing), and a versioned human
+permit-to-work record (draft → submitted → independent approval → revocation).
+Three explicit site-condition attestations and an evidence reference are
+required for submission; these are *assertions*, not verified physical checks.
+Each equipment-linked order must have its most recent permit approved and
+equipment active before work start, resume or successful safety revalidation.
+In-progress work is put on an HRMS hold if its permit is revoked, equipment is
+marked out of service, or stricter equipment credential policy is added.
+
+Remaining engineering work: certified PTW compliance, equipment-specific
+skills, tamper-resistant evidence uploads, periodic mandatory rechecks, PLC/
+robot/machine interlock integration, LOTO verification and operator training.
+No legally effective PTW or physical machine protection is claimed.
+See `docs/adr/0013-equipment-permit-workflow.md`.
 
 ### Parallel hardening
 

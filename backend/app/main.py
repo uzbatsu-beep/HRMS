@@ -16,6 +16,7 @@ from app.work.router import router as work_router
 from app.work.execution_router import router as work_execution_router
 from app.analytics.router import router as analytics_router
 from app.configuration.router import router as configuration_router
+from app.equipment.router import router as equipment_router
 
 app = FastAPI(
     title=settings.app_name,
@@ -42,6 +43,7 @@ app.include_router(work_router)
 app.include_router(work_execution_router)
 app.include_router(analytics_router)
 app.include_router(configuration_router)
+app.include_router(equipment_router)
 
 
 @app.get("/", tags=["system"], summary="API information")

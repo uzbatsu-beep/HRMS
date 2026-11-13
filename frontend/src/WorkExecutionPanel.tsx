@@ -21,6 +21,7 @@ type MemberSafety = {
 };
 type SafetyResult = {
   passed: boolean; status: string; checked_at: string; members: MemberSafety[];
+  equipment_blockers: { code: string; message: string }[];
 };
 
 const API = "/api/v1/work";
@@ -43,6 +44,10 @@ const blockerText: Record<string, string> = {
   BOOKED: "Сотрудник забронирован для другой работы",
   CALENDAR_CLOSED: "Нерабочий день предприятия",
   RESERVATION_INVALID: "Бронирование работы более недействительно",
+  EQUIPMENT_MISSING: "Оборудование отсутствует",
+  EQUIPMENT_OUT_OF_SERVICE: "Оборудование выведено из эксплуатации",
+  WORK_PERMIT_NOT_APPROVED: "Нет согласованного разрешения на работы",
+  WORK_PERMIT_INCOMPLETE: "Недостаточно подтверждений по месту работ",
 };
 
 const blockerSource: Record<string, string> = {
@@ -280,6 +285,11 @@ export default function WorkExecutionPanel({
               <strong>{checked.passed ? "Все назначенные участники прошли проверки" :
                 "Обнаружены блокирующие условия"}</strong>
               <p>Состояние: {checked.status} · {new Date(checked.checked_at).toLocaleString("ru-RU")}</p>
+              {checked.equipment_blockers?.map((block, index) => (
+                <p key={index} className="wm-warning">
+                  Оборудование: {blockerText[block.code] ?? block.message}
+                </p>
+              ))}
               {checked.members.map((member) => (
                 <div key={member.person_id} className="wm-member-check">
                   <b>{roleNames[member.role] ?? member.role} ·
