@@ -255,7 +255,7 @@ def start_order(
         raise HTTPException(status_code=404, detail="Work order not found")
     if order.status != "assigned":
         raise HTTPException(status_code=409, detail="Work must be assigned before starting")
-    now = work_service.utcnow()
+    now = as_utc(work_service.utcnow())
     if not as_utc(order.starts_at) <= now < as_utc(order.ends_at):
         raise HTTPException(status_code=409, detail="Work cannot start outside planned interval")
     assignment = db.scalar(select(WorkOrderAssignment).where(
