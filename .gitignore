@@ -20,3 +20,8 @@ dist/
 .DS_Store
 Thumbs.db
 postgres_data/
+
+# Playwright E2E output and synthetic fixture IDs
+frontend/playwright-report/
+frontend/test-results/
+frontend/e2e/.tmp/

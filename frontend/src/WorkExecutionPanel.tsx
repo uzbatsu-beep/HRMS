@@ -31,6 +31,20 @@ const roleNames: Record<string, string> = {
   lead: "Ответственный", specialist: "Специалист",
   assistant: "Помощник", observer: "Наблюдатель",
 };
+const blockerText: Record<string, string> = {
+  REVOKED_CREDENTIAL: "Допуск отозван",
+  EXPIRED_CREDENTIAL: "Срок действия допуска истёк",
+  MISSING_CREDENTIAL: "Нет обязательного действующего допуска",
+  UNVERIFIED_CREDENTIAL: "Документ не подтверждён",
+  MISSING_VERIFIED_SKILL: "Нет подтверждённой компетенции",
+  INSUFFICIENT_SKILL_LEVEL: "Уровень компетенции ниже минимального",
+  NO_SHIFT: "В заданном интервале нет рабочей смены",
+  ABSENT: "Участник отсутствует в указанное время",
+  BOOKED: "Сотрудник забронирован для другой работы",
+  CALENDAR_CLOSED: "Нерабочий день предприятия",
+  RESERVATION_INVALID: "Бронирование работы более недействительно",
+};
+
 const blockerSource: Record<string, string> = {
   person: "Сотрудник", organization: "Подразделение",
   skill: "Навык", credential: "Допуск", calendar: "График",
@@ -76,7 +90,9 @@ export default function WorkExecutionPanel({
   const onHold = order.status === "on_hold";
 
   useEffect(() => {
-    setChecked(null);
+    // Preserve the just-returned safety report when the parent reloads after
+    // an on_hold transition. The panel is keyed by order ID, so selecting a
+    // different work order already resets this state.
     setPriority(order.priority);
     setCandidates([]); setSelectedPerson("");
     if (!assigned) return;
@@ -272,7 +288,7 @@ export default function WorkExecutionPanel({
                     <span> · проверен</span>
                   ) : member.candidate.blockers.map((block, index) => (
                     <p key={index}>{blockerSource[block.source] ?? block.source}:{" "}
-                      {block.message}</p>
+                      {blockerText[block.code] ?? block.message}</p>
                   ))}
                 </div>
               ))}
