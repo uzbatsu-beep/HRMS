@@ -190,3 +190,18 @@ work actions continue to revalidate independently. See ADR-0016.
 
 Next backlog: independent policy approval/version management, richer
 role-permission matrix, formal CMMS integration and operator training.
+
+
+### PR #21 — Equipment Audit Explorer and keyset pagination (in review)
+
+Admin-only historical event explorer for assets, equipment policies, permits
+and downtime. New bounded endpoint supports exact action, actor/subject UUID
+and timestamp filters, and stable (created_at, id) keyset pagination. The new
+response is deliberately metadata-only, without human-entered details_json or
+document references; the older admin-only /audit endpoint remains for API
+compatibility. Browser UI supports filtering and previous/next pages.
+
+This is an application activity history, not a tamper-proof legal audit trail
+or evidence of machine actions. ADR-0017 describes limitations and tests.
+Follow-up: certified retention/log integrity, domain policy governance,
+permissions matrix, company-scoped admin delegation.

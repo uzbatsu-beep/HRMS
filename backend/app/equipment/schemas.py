@@ -210,3 +210,22 @@ class CrewReadinessSnapshot(BaseModel):
     gates_passed: bool
     crew_eligibility_checked: Literal[True] = True
     read_only: Literal[True] = True
+
+
+class EquipmentAuditRow(BaseModel):
+    """Bounded audit metadata only, never arbitrary detail payloads."""
+
+    id: UUID
+    action: str
+    actor_id: UUID
+    actor_username: str
+    subject_id: UUID
+    created_at: datetime
+
+
+class EquipmentAuditPage(BaseModel):
+    enterprise_id: UUID
+    items: list[EquipmentAuditRow]
+    next_cursor: str | None
+    has_more: bool
+    detail_payloads_included: Literal[False] = False
