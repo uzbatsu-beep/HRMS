@@ -1,6 +1,5 @@
 """Work Management API: scoped planning and atomic, non-bypassable assignment."""
 
-from datetime import timedelta
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -21,7 +20,7 @@ from app.personnel.service import require_visible_person
 from app.work import service as work_service
 from app.work.models import WorkAuditEvent, WorkOrder, WorkOrderAssignment, WorkSkillRequirement
 from app.work.schemas import (
-    AssignmentCreate, Blocker, CandidateView, WorkCreate, WorkAuditView, WorkView,
+    AssignmentCreate, CandidateView, WorkCreate, WorkAuditView, WorkView,
 )
 
 router = APIRouter(prefix=f"{settings.api_v1_prefix}/work", tags=["work management"])
