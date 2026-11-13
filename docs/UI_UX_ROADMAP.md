@@ -175,3 +175,18 @@ both deny overlap with [work starts_at, ends_at), and site authorization remains
 external to HRMS. Cancelled maintenance windows stop blocking but never
 automatically resume work. An operator must explicitly revalidate. Refer to
 docs/adr/0015-equipment-downtime.md.
+
+
+### PR #20 — On-demand Redacted Crew Readiness (in review)
+
+The existing equipment overview intentionally checks only current asset/
+permit/downtime software conditions. Dispatchers can now request a separate,
+per-WorkOrder snapshot that reuses the central server crew safety checker and
+returns only check timestamp, aggregate member counts and blocker **codes**.
+Access requires visibility of both the work and asset units; viewers cannot
+request personnel readiness. There is no PII in the API response and no
+background monitoring, audit mutation or work status change on read. All live
+work actions continue to revalidate independently. See ADR-0016.
+
+Next backlog: independent policy approval/version management, richer
+role-permission matrix, formal CMMS integration and operator training.

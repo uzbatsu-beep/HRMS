@@ -15,7 +15,7 @@ from app.config import settings
 from app.competence.models import Skill, SkillScaleLevel
 from app.credentials.models import CredentialType
 from app.database import get_db
-from app.equipment import service
+from app.equipment import readiness, service
 from app.equipment.models import (
     AssetCredentialRequirement, AssetDowntimeWindow, AssetSkillRequirement,
     EquipmentAsset, EquipmentAuditEvent,
@@ -26,6 +26,7 @@ from app.equipment.schemas import (
     DowntimeCreate, DowntimeCancel, DowntimeView,
     AssetStateChange, AssetView, EquipmentReadiness, LinkedWorkReadiness,
     EquipmentLinkCreate, PermitDraft, PermitReason, PermitView, SafetyPackage,
+    CrewReadinessSnapshot,
 )
 from app.identity.models import UserAccount
 from app.identity.security import get_current_user, require_admin, require_csrf
@@ -576,6 +577,30 @@ def revoke_permit(
     })
     work_service.commit_safe(db)
     return permit_view(row)
+
+
+@router.get(
+    "/orders/{order_id}/crew-readiness", response_model=CrewReadinessSnapshot,
+)
+def read_crew_readiness(
+    order_id: UUID,
+    user: UserAccount = Depends(get_current_user),  # noqa: B008
+    db: Session = Depends(get_db),  # noqa: B008
+) -> CrewReadinessSnapshot:
+    """On-demand read-only crew snapshot. Never issues work authorization.
+
+    Access requires dispatch role and visibility of BOTH the work-order unit
+    and linked equipment unit. No personal identifiers are returned.
+    """
+    require_dispatcher(user)
+    order = read_order(db, user, order_id)
+    link = service.link_for(db, order.id)
+    if link is None or link.enterprise_id != order.enterprise_id:
+        raise HTTPException(status_code=404, detail="Equipment-linked work not found")
+    asset = get_asset(db, user, link.asset_id)
+    if asset.enterprise_id != order.enterprise_id:
+        raise HTTPException(status_code=404, detail="Equipment-linked work not found")
+    return readiness.snapshot(db, order)
 
 
 @router.get(
