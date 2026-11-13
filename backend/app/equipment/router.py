@@ -6,7 +6,7 @@ This is a human-recorded workflow; never implies PLC/interlock authorization.
 from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -15,7 +15,7 @@ from app.config import settings
 from app.competence.models import Skill, SkillScaleLevel
 from app.credentials.models import CredentialType
 from app.database import get_db
-from app.equipment import readiness, service
+from app.equipment import audit_explorer, readiness, service
 from app.equipment.models import (
     AssetCredentialRequirement, AssetDowntimeWindow, AssetSkillRequirement,
     EquipmentAsset, EquipmentAuditEvent,
@@ -26,7 +26,7 @@ from app.equipment.schemas import (
     DowntimeCreate, DowntimeCancel, DowntimeView,
     AssetStateChange, AssetView, EquipmentReadiness, LinkedWorkReadiness,
     EquipmentLinkCreate, PermitDraft, PermitReason, PermitView, SafetyPackage,
-    CrewReadinessSnapshot,
+    CrewReadinessSnapshot, EquipmentAuditPage,
 )
 from app.identity.models import UserAccount
 from app.identity.security import get_current_user, require_admin, require_csrf
@@ -654,6 +654,38 @@ def equipment_readiness(
         on_hold=sum(item.status == "on_hold" for item in items),
         items=items,
     )
+
+
+@router.get(
+    "/enterprises/{enterprise_id}/audit/explorer",
+    response_model=EquipmentAuditPage,
+)
+def explore_equipment_audit(
+    enterprise_id: UUID,
+    limit: int = Query(default=20, ge=1, le=50),  # noqa: B008
+    action: str | None = Query(default=None, min_length=3, max_length=64),  # noqa: B008
+    subject_id: UUID | None = None,
+    actor_id: UUID | None = None,
+    since: datetime | None = None,
+    until: datetime | None = None,
+    cursor: str | None = Query(default=None, max_length=180),  # noqa: B008
+    _admin: UserAccount = Depends(require_admin),  # noqa: B008
+    db: Session = Depends(get_db),  # noqa: B008
+) -> EquipmentAuditPage:
+    """Bounded keyset view of redacted metadata, not a compliance certificate."""
+    if db.get(Enterprise, enterprise_id) is None:
+        raise HTTPException(status_code=404, detail="Enterprise not found")
+    # RFC3339 timestamps must be timezone aware to prevent ambiguous bounds.
+    if any(value is not None and value.tzinfo is None for value in (since, until)):
+        raise HTTPException(status_code=422, detail="Timezone required for audit bounds")
+    try:
+        return audit_explorer.read_page(
+            db, enterprise_id, limit, action=action,
+            subject_id=subject_id, actor_id=actor_id,
+            since=since, until=until, cursor=cursor,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/enterprises/{enterprise_id}/audit", response_model=list[dict])

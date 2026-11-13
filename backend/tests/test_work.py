@@ -15,6 +15,7 @@ from app.identity.models import UserAccount
 from app.identity.security import hash_password
 from app.main import app
 from app.availability.models import WorkReservation
+from app.equipment.models import EquipmentAuditEvent
 from app.credentials.models import PersonCredential
 from app.personnel.models import EmploymentAssignment, WorkforceResource
 from app.work.models import WorkAuditEvent, WorkOrder, WorkOrderAssignment
@@ -1725,3 +1726,113 @@ def test_equipment_crew_readiness_requires_dispatch_and_both_unit_scopes(
     assert client.get(
         f"{EQUIPMENT}/orders/{outside_work['id']}/crew-readiness"
     ).status_code == 200
+
+
+# PR #21 — admin-only bounded redacted equipment audit keyset explorer.
+
+def test_equipment_audit_explorer_keyset_is_stable_and_payload_redacted(
+    scenario: tuple[TestClient, Session],
+) -> None:
+    client, db = scenario
+    s = seed(client)
+    endpoint = f"{EQUIPMENT}/enterprises/{s['enterprise']}/audit/explorer"
+    assets = [
+        add_test_asset(client, s, f"audit-explorer-21-{index}")
+        for index in range(6)
+    ]
+    expected = [
+        str(row.id)
+        for row in db.scalars(
+            select(EquipmentAuditEvent).where(
+                EquipmentAuditEvent.enterprise_id == UUID(s["enterprise"]),
+                EquipmentAuditEvent.action == "asset.created",
+            ).order_by(
+                EquipmentAuditEvent.created_at.desc(),
+                EquipmentAuditEvent.id.desc(),
+            )
+        ).all()
+    ]
+    # Existing event table is append-only and filter spans identical timestamps.
+    seen: list[str] = []
+    cursor: str | None = None
+    for index in range(3):
+        params = {"action": "asset.created", "limit": 2}
+        if cursor:
+            params["cursor"] = cursor
+        response = client.get(endpoint, params=params)
+        assert response.status_code == 200, response.text
+        page = response.json()
+        assert page["enterprise_id"] == s["enterprise"]
+        assert page["detail_payloads_included"] is False
+        assert len(page["items"]) == 2
+        assert page["has_more"] is (index < 2)
+        cursor = page["next_cursor"]
+        for row in page["items"]:
+            assert row["actor_username"] == "wm-admin"
+            assert row["action"] == "asset.created"
+            assert row["subject_id"] in {asset["id"] for asset in assets}
+            assert {"details_json", "evidence_reference", "reason"}.isdisjoint(
+                row.keys()
+            )
+            seen.append(row["id"])
+    assert seen == expected
+    assert len(set(seen)) == 6
+    assert cursor is None
+
+    filtered = client.get(
+        endpoint, params={
+            "subject_id": assets[0]["id"], "action": "asset.created",
+        },
+    )
+    assert filtered.status_code == 200
+    assert len(filtered.json()["items"]) == 1
+    actor = filtered.json()["items"][0]["actor_id"]
+    actor_filtered = client.get(endpoint, params={"actor_id": actor, "limit": 50})
+    assert actor_filtered.status_code == 200
+    assert len(actor_filtered.json()["items"]) >= 6
+    until = "2000-01-01T00:00:00+00:00"
+    assert client.get(endpoint, params={"until": until}).json()["items"] == []
+
+
+def test_equipment_audit_explorer_scope_validation_and_legacy_compat(
+    scenario: tuple[TestClient, Session],
+) -> None:
+    client, _db = scenario
+    s = seed(client)
+    asset = add_test_asset(client, s, "audit-explorer-scope-21")
+    endpoint = f"{EQUIPMENT}/enterprises/{s['enterprise']}/audit/explorer"
+    assert client.get(endpoint, params={"limit": 0}).status_code == 422
+    assert client.get(endpoint, params={"limit": 51}).status_code == 422
+    assert client.get(endpoint, params={"cursor": "not-base64!!"}).status_code == 422
+    assert client.get(
+        endpoint, params={"cursor": "x" * 181},
+    ).status_code == 422
+    assert client.get(
+        endpoint, params={"since": "2026-01-01T00:00:00"},
+    ).status_code == 422
+    assert client.get(
+        endpoint, params={
+            "since": "2026-11-30T12:00:00+00:00",
+            "until": "2026-01-01T12:00:00+00:00",
+        },
+    ).status_code == 422
+    assert client.get(
+        endpoint, params={"subject_id": s["foreign_person"]},
+    ).json()["items"] == []
+    assert client.get(
+        f"{EQUIPMENT}/enterprises/{s['foreign_person']}/audit/explorer"
+    ).status_code == 404
+    auth(client, "wm-manager")
+    assert client.get(endpoint).status_code == 403
+    auth(client, "wm-viewer")
+    assert client.get(endpoint).status_code == 403
+    auth(client)
+    legacy = client.get(
+        f"{EQUIPMENT}/enterprises/{s['enterprise']}/audit",
+    )
+    assert legacy.status_code == 200
+    assert "details_json" in legacy.json()[0]
+    current = client.get(endpoint)
+    assert current.status_code == 200
+    assert "details_json" not in current.json()["items"][0]
+    assert current.json()["items"][0]["subject_id"] == asset["id"]

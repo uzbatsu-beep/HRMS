@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useWorkspace } from "./WorkspaceContext";
 import EquipmentDowntimePanel from "./EquipmentDowntimePanel";
 import EquipmentCrewSnapshot from "./EquipmentCrewSnapshot";
+import EquipmentAuditExplorer from "./EquipmentAuditExplorer";
 
 type Asset = {
   id: string; enterprise_id: string; unit_id: string; code: string; name: string;
@@ -366,6 +367,7 @@ export default function EquipmentPanel() {
           </>
         )}
       </div>
+      {admin && <EquipmentAuditExplorer key={enterpriseId} enterpriseId={enterpriseId} />}
       <p className="workspace-warning">Только прототип и синтетические данные.
         Статус оборудования в HRMS не управляет станком, роботом, защитными ограждениями
         или промышленными safety-цепями.</p>
