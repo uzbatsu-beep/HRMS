@@ -196,3 +196,32 @@ hazard checks, machine-specific authorization, crew staffing, continuously
 enforced stop triggers after work begins, dual-control policy edits,
 automatic repair of out-of-band reservation cancellation, load-balanced
 candidate pagination or parallel Postgres race tests. Synthetic records only.
+
+
+## PR #11 — Multi-person Work Crews & Manual Safety Holds (Phase 8)
+
+- Optional WorkOrder priority with four fixed levels and audited amendments
+  only before work starts (no safety override).
+- One existing lead plus up to eight supporting participants with one
+  WorkCrewMember and WorkReservation each, same-tenant composite constraints.
+- Specialist, assistant and observer roles; **identical hard eligibility
+  gates** for every person regardless of role.
+- Crew add/remove and lead replacement under an enterprise-wide transaction
+  lock. Cancel old time reservations without deleting audit history.
+- Whole-roster pre-start check; any invalid/absent/withdrawn participant or
+  canceled/mismatched reservation blocks start.
+- Explicit GET safety diagnostic and POST revalidation. In-progress failures
+  change work status to `on_hold` with an auditable reason.
+- Manual hold/resume workflow: documented reason and fresh passing checks,
+  no outside-window resume. Completion also rechecks and holds on failure.
+- Cancellation releases all active participant reservations.
+- React WorkExecutionPanel with roles, personnel changes, priority and
+  explicit safety review/hold state.
+- PostgreSQL revision `0009_work_execution`, regression coverage and
+  ADR-0009.
+
+**Safety disclaimer:** No background or event-driven watch of revoked
+credentials or absences. `on_hold` does not interact with PLCs, drives,
+robots or process safety hardware. No formal permit-to-work, lockout/tagout,
+site hazard review, equipment-specific credential levels, team composition
+policy or approved production data-protection controls. Synthetic data only.
