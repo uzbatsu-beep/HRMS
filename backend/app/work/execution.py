@@ -4,7 +4,6 @@ No background watcher or industrial safety function is provided. Explicit checks
 must be called by dispatchers; safety holds prevent completing work in the UI.
 """
 
-from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import select
