@@ -280,7 +280,7 @@ class PolicyProposalView(BaseModel):
     id: UUID
     enterprise_id: UUID
     asset_id: UUID
-    kind: Literal["credential", "skill"]
+    kind: Literal["credential", "skill", "skill_upgrade"]
     credential_type_id: UUID | None
     skill_id: UUID | None
     scale_id: UUID | None
