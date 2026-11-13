@@ -157,29 +157,25 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, [session?.user.id, enterpriseId, personId, revision]);
 
   const setEnterpriseId = useCallback<Dispatch<SetStateAction<string>>>((action) => {
-    writeEnterprise((old) => {
-      const candidate = typeof action === "function" ? action(old) : action;
-      if (candidate && !enterprises.some((entry) => entry.id === candidate)) return old;
-      if (candidate !== old) {
-        writeUnit("");
-        writePerson("");
-        setPerson(null);
-      }
-      return candidate;
-    });
-  }, [enterprises]);
+    const candidate = typeof action === "function" ? action(enterpriseId) : action;
+    if (candidate && !enterprises.some((entry) => entry.id === candidate)) return;
+    if (candidate !== enterpriseId) {
+      writeUnit("");
+      writePerson("");
+      setPerson(null);
+      writeEnterprise(candidate);
+    }
+  }, [enterprises, enterpriseId]);
 
   const setUnitId = useCallback<Dispatch<SetStateAction<string>>>((action) => {
-    writeUnit((old) => {
-      const candidate = typeof action === "function" ? action(old) : action;
-      if (candidate && !units.some((unit) => unit.id === candidate)) return old;
-      if (candidate !== old) {
-        writePerson("");
-        setPerson(null);
-      }
-      return candidate;
-    });
-  }, [units]);
+    const candidate = typeof action === "function" ? action(unitId) : action;
+    if (candidate && !units.some((unit) => unit.id === candidate)) return;
+    if (candidate !== unitId) {
+      writePerson("");
+      setPerson(null);
+      writeUnit(candidate);
+    }
+  }, [units, unitId]);
 
   const setPersonId = useCallback<Dispatch<SetStateAction<string>>>((action) => {
     writePerson((old) => typeof action === "function" ? action(old) : action);
