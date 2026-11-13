@@ -927,3 +927,80 @@ def test_viewer_and_csrf_denied_crew_write(
         headers=auth(client, "wm-viewer"),
         json={"reason": "A viewer cannot pause someone else's work."},
     ).status_code == 403
+
+
+def test_qualified_crew_can_start_and_complete(
+    scenario: tuple[TestClient, Session], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, db = scenario
+    s = seed(client)
+    verified_skills(client, s)
+    verified_permit(client, s)
+    qualified_second_worker(client, s)
+    work = create_work(client, s, "crew-success")
+    assert assign(client, work, s["person"]).status_code == 200
+    added = client.post(
+        f"{BASE}/orders/{work['id']}/crew", headers=auth(client),
+        json={"person_id": s["other_person"], "role": "specialist"},
+    )
+    assert added.status_code == 201, added.text
+    planned = datetime.fromisoformat(work["starts_at"])
+    monkeypatch.setattr(work_service, "utcnow", lambda: planned + timedelta(minutes=5))
+    started = client.post(
+        f"{BASE}/orders/{work['id']}/start", headers=auth(client)
+    )
+    assert started.status_code == 200, started.text
+    assert started.json()["status"] == "in_progress"
+    check = client.get(f"{BASE}/orders/{work['id']}/safety")
+    assert check.status_code == 200, check.text
+    assert check.json()["passed"] is True
+    assert {member["role"] for member in check.json()["members"]} == {
+        "lead", "specialist",
+    }
+    completed = client.post(
+        f"{BASE}/orders/{work['id']}/complete", headers=auth(client)
+    )
+    assert completed.status_code == 200, completed.text
+    assert completed.json()["status"] == "completed"
+    assert len(db.scalars(select(WorkReservation)).all()) == 2
+
+
+def test_invalid_crew_at_completion_persists_safety_hold_without_finishing(
+    scenario: tuple[TestClient, Session], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, db = scenario
+    s = seed(client)
+    verified_skills(client, s)
+    verified_permit(client, s)
+    qualified_second_worker(client, s)
+    work = create_work(client, s, "crew-comp-hold")
+    assert assign(client, work, s["person"]).status_code == 200
+    added = client.post(
+        f"{BASE}/orders/{work['id']}/crew", headers=auth(client),
+        json={"person_id": s["other_person"], "role": "assistant"},
+    )
+    assert added.status_code == 201, added.text
+    planned = datetime.fromisoformat(work["starts_at"])
+    monkeypatch.setattr(work_service, "utcnow", lambda: planned + timedelta(minutes=5))
+    assert client.post(
+        f"{BASE}/orders/{work['id']}/start", headers=auth(client)
+    ).status_code == 200
+    post(
+        client, f"/api/v1/availability/resources/{s['other_resource']}/absences",
+        {
+            "starts_at": interval()[0], "ends_at": interval()[1],
+            "category": "unavailable",
+        },
+    )
+    denied = client.post(
+        f"{BASE}/orders/{work['id']}/complete", headers=auth(client)
+    )
+    assert denied.status_code == 409, denied.text
+    assert "ABSENT" in str(denied.json())
+    order = db.get(WorkOrder, UUID(work["id"]))
+    db.refresh(order)
+    assert order.status == "on_hold"
+    assert order.completed_at is None
+    assert "safety.hold" in {
+        event.action for event in db.scalars(select(WorkAuditEvent)).all()
+    }
