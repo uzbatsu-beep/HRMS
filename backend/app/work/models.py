@@ -5,7 +5,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     CheckConstraint, DateTime, ForeignKey, ForeignKeyConstraint,
-    Integer, String, Text, UniqueConstraint, func,
+    String, Text, UniqueConstraint, func,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
