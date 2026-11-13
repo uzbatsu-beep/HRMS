@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
+import { useWorkspace } from "./WorkspaceContext";
 
 type Session = {
   user: { id: string; username: string; role: "admin" | "manager" | "viewer" };
@@ -50,23 +51,21 @@ async function request<T>(path: string, init: RequestInit = {}, csrf?: string): 
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-export default function PersonnelPanel({
-  contextEnterpriseId, focusedPersonId,
-}: {
-  contextEnterpriseId?: string;
-  focusedPersonId?: string;
-} = {}) {
+export default function PersonnelPanel() {
   const [authRevision, setAuthRevision] = useState(0);
   const [session, setSession] = useState<Session | null>(null);
   const [enterprises, setEnterprises] = useState<Enterprise[]>([]);
-  const [enterpriseId, setEnterpriseId] = useState("");
+  const {
+    enterpriseId, setEnterpriseId, unitId: unitFilter, setUnitId: setUnitFilter,
+    personId: selectedId, setPersonId: setSelectedId,
+  } = useWorkspace();
   const [units, setUnits] = useState<Unit[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
-  const [selectedId, setSelectedId] = useState("");
+
   const [detail, setDetail] = useState<Detail | null>(null);
   const [queryDraft, setQueryDraft] = useState("");
   const [query, setQuery] = useState("");
-  const [unitFilter, setUnitFilter] = useState("");
+
   const [includeArchived, setIncludeArchived] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [error, setError] = useState("");
@@ -121,7 +120,6 @@ export default function PersonnelPanel({
   useEffect(() => {
     if (!session) {
       setEnterprises([]);
-      setEnterpriseId("");
       setPeople([]);
       setDetail(null);
       setUnits([]);
@@ -132,24 +130,18 @@ export default function PersonnelPanel({
       .then((records) => {
         if (!active) return;
         setEnterprises(records);
-        setEnterpriseId((previous) => {
-          const requested = contextEnterpriseId && records.some(
-            (item) => item.id === contextEnterpriseId,
-          ) ? contextEnterpriseId : previous;
-          return records.some((item) => item.id === requested)
-            ? requested : records[0]?.id ?? "";
-        });
+        setEnterpriseId((previous) =>
+          records.some((item) => item.id === previous)
+            ? previous : records[0]?.id ?? "");
       })
       .catch((reason: unknown) => {
         if (active) setError(reason instanceof Error ? reason.message : "Ошибка API");
       });
     return () => { active = false; };
-  }, [session?.user.id, refresh, contextEnterpriseId]);
+  }, [session?.user.id, refresh]);
 
   useEffect(() => {
-    setSelectedId(focusedPersonId ?? "");
     setDetail(null);
-    setUnitFilter("");
     if (!session || !enterpriseId) {
       setUnits([]);
       setPeople([]);
@@ -162,7 +154,7 @@ export default function PersonnelPanel({
         if (active) setError(reason instanceof Error ? reason.message : "Ошибка подразделений");
       });
     return () => { active = false; };
-  }, [enterpriseId, session?.user.id, focusedPersonId]);
+  }, [enterpriseId, session?.user.id]);
 
   useEffect(() => {
     if (!session || !enterpriseId) return;

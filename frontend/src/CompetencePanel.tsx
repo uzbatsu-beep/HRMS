@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useWorkspace } from "./WorkspaceContext";
 
 type User = { id: string; username: string; role: "admin" | "manager" | "viewer" };
 type Session = { user: User; csrf_token: string };
@@ -57,7 +58,10 @@ export default function CompetencePanel() {
   const [session, setSession] = useState<Session | null>(null);
   const [refresh, setRefresh] = useState(0);
   const [enterprises, setEnterprises] = useState<Enterprise[]>([]);
-  const [enterpriseId, setEnterpriseId] = useState("");
+  const {
+    enterpriseId, setEnterpriseId,
+    personId: selectedPerson, setPersonId: setSelectedPerson,
+  } = useWorkspace();
   const [categories, setCategories] = useState<Category[]>([]);
   const [scales, setScales] = useState<Scale[]>([]);
   const [skills, setSkills] = useState<Skill[]>([]);
@@ -65,7 +69,7 @@ export default function CompetencePanel() {
   const [users, setUsers] = useState<User[]>([]);
   const [links, setLinks] = useState<Link[]>([]);
   const [ownLink, setOwnLink] = useState<Link | null>(null);
-  const [selectedPerson, setSelectedPerson] = useState("");
+
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [matrix, setMatrix] = useState<MatrixRow[]>([]);
   const [error, setError] = useState("");
@@ -133,9 +137,9 @@ export default function CompetencePanel() {
 
   useEffect(() => {
     if (!session) {
-      setEnterprises([]); setEnterpriseId(""); setPeople([]);
+      setEnterprises([]); setPeople([]);
       setCategories([]); setScales([]); setSkills([]);
-      setAssessments([]); setMatrix([]); setOwnLink(null); setSelectedPerson("");
+      setAssessments([]); setMatrix([]); setOwnLink(null);
       return;
     }
     let active = true;

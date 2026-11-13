@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useWorkspace } from "./WorkspaceContext";
 
 type User = { id: string; username: string; role: "admin" | "manager" | "viewer" };
 type Session = { user: User; csrf_token: string };
@@ -88,7 +89,7 @@ export default function OrganizationPanel() {
   const [authLoading, setAuthLoading] = useState(true);
   const [refresh, setRefresh] = useState(0);
   const [enterprises, setEnterprises] = useState<Enterprise[]>([]);
-  const [enterpriseId, setEnterpriseId] = useState("");
+  const { enterpriseId, setEnterpriseId } = useWorkspace();
   const [types, setTypes] = useState<UnitType[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
   const [users, setUsers] = useState<User[]>([]);

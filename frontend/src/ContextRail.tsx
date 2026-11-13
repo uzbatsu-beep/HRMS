@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
+import { useWorkspace, type WorkspaceUnit } from "./WorkspaceContext";
 
 type Session = { user: { id: string; username: string; role: string } };
-type Enterprise = { id: string; name: string; code: string };
-type Unit = { id: string; name: string; code: string; parent_id: string | null };
+type Unit = WorkspaceUnit;
 type Person = {
   id: string; employee_code: string; first_name: string; last_name: string;
   middle_name: string | null; current_unit_id: string | null;
@@ -55,10 +55,10 @@ export default function ContextRail({
   onPersonSelect: (person: PersonFocus) => void;
   onNavigate: (page: string) => void;
 }) {
-  const [enterprises, setEnterprises] = useState<Enterprise[]>([]);
-  const [enterpriseId, setEnterpriseId] = useState("");
-  const [units, setUnits] = useState<Unit[]>([]);
-  const [unitId, setUnitId] = useState("");
+  const {
+    enterprises, enterpriseId, setEnterpriseId,
+    units, unitId, setUnitId, refresh: refreshContext, error: contextError,
+  } = useWorkspace();
   const [persons, setPersons] = useState<Person[]>([]);
   const [search, setSearch] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
@@ -82,41 +82,6 @@ export default function ContextRail({
     const timer = window.setTimeout(() => setSearchTerm(search.trim()), 250);
     return () => window.clearTimeout(timer);
   }, [search]);
-
-  useEffect(() => {
-    if (!session) {
-      setEnterprises([]); setEnterpriseId(""); setUnits([]);
-      setPersons([]); setError(""); return;
-    }
-    const controller = new AbortController();
-    get<Enterprise[]>("/api/v1/org/enterprises", controller.signal)
-      .then((data) => {
-        setEnterprises(data);
-        setEnterpriseId((previous) => data.some((row) => row.id === previous)
-          ? previous : data[0]?.id ?? "");
-        setError("");
-      })
-      .catch((reason: unknown) => {
-        if (!controller.signal.aborted) setError(
-          reason instanceof Error ? reason.message : "Ошибка списка предприятий",
-        );
-      });
-    return () => controller.abort();
-  }, [session?.user.id, refresh]);
-
-  useEffect(() => {
-    setUnitId(""); setUnits([]);
-    if (!session || !enterpriseId) return;
-    const controller = new AbortController();
-    get<Unit[]>(`/api/v1/org/enterprises/${enterpriseId}/units`, controller.signal)
-      .then((data) => setUnits(data))
-      .catch((reason: unknown) => {
-        if (!controller.signal.aborted) setError(
-          reason instanceof Error ? reason.message : "Ошибка подразделений",
-        );
-      });
-    return () => controller.abort();
-  }, [enterpriseId, session?.user.id, refresh]);
 
   useEffect(() => { setOffset(0); setPersons([]); }, [
     enterpriseId, unitId, searchTerm, session?.user.id,
@@ -160,7 +125,7 @@ export default function ContextRail({
           <h2>Структура и персонал</h2>
         </div>
         <button type="button" title="Обновить данные" className="rail-refresh"
-          onClick={() => setRefresh((old) => old + 1)}>↻</button>
+          onClick={() => { refreshContext(); setRefresh((old) => old + 1); }}>↻</button>
       </div>
       {!session ? (
         <div className="rail-empty">
@@ -243,7 +208,8 @@ export default function ContextRail({
               Все карточки персонала
             </button>
           </section>
-          {error && <p className="rail-error" role="alert">{error}</p>}
+          {(error || contextError) &&
+            <p className="rail-error" role="alert">{error || contextError}</p>}
         </>
       )}
     </aside>
