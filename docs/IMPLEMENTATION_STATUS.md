@@ -164,3 +164,35 @@ Known gaps: no legal labor-law calendar, no actual WorkOrder assignment,
 no machine authorization, no automatic conflict escalation after changed
 leave/holiday/schedules, no manager leave approvals and no production privacy
 or authentication hardening. Development/test and synthetic records only.
+
+
+## PR #10 — Work Management (Phase 7)
+
+Implemented:
+- WorkOrder entities for enterprise, organizational unit, activity code,
+  offset-aware planned window, unique code, creator and lifecycle;
+  1–20 immutable per-order minimum approved skill thresholds.
+- Composite PostgreSQL FKs tie WorkOrder, Skill, scale/level and assignee to
+  same enterprise; unique WorkOrderAssignment limits this slice to one
+  accountable assignee per work order.
+- Explainable candidate matching: current primary unit, latest approved
+  competence at or above each threshold, mandatory independently verified
+  credential policy on relevant dates, and absence-free shift/closure/calendar.
+- Fail closed on missing activity permit policy, missing skill assessment,
+  wrong skill scale, archived skill, expired/revoked credentials, no shift,
+  absence, holiday, existing reservation, inactive Person or wrong unit.
+- Scoped admin/manager dispatch; viewer read-only; CSRF; tenant isolation.
+- Atomic assignment plus WorkReservation inside PostgreSQL enterprise lock.
+  A stale prior UI eligibility result cannot bypass the fresh server decision.
+- At planned start, re-evaluate all gates and ensure same active WorkReservation;
+  exclude only its own booking from overlap checks.
+- Lifecycle: open → assigned → in_progress → completed, cancellation from
+  nonterminal stages, preserving immutable audit and releasing reservation.
+- React Work Management module with creation, candidate explanations, dispatch,
+  start/complete/cancel, status board; migration 0008, tests and ADR-0008.
+
+Not production-safe: no regulator-issued electronic permit, LOTO, site
+hazard checks, machine-specific authorization, crew staffing, continuously
+enforced stop triggers after work begins, dual-control policy edits,
+automatic repair of out-of-band reservation cancellation, load-balanced
+candidate pagination or parallel Postgres race tests. Synthetic records only.
