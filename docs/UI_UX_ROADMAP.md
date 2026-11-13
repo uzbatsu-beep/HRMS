@@ -58,13 +58,20 @@ explainable work matching, crew assignment, late permit revocation, hold,
 and cancellation. Publish screenshots, trace files and CI artifacts on failure.
 Test low-width navigation and right rail access scopes.
 
-### PR #14 — Unified app state and navigation
+### PR #14 — Unified app state and navigation (implemented)
 
-Replace separate enterprise selection states in each panel with a shared,
-scoped app context (enterprise ID, unit ID, selected Person, date window).
-Add breadcrumb trails, global search, complete person details via right rail,
-saved filters and meaningful empty/loading/error states. Introduce robust
-route semantics (potentially React Router) only when necessary.
+A React WorkspaceProvider now shares the scoped enterprise, selected
+department and Person across the right rail and major business modules.
+Topbar personnel search uses the authenticated current-enterprise endpoint.
+Breadcrumbs show the current navigation and workplace context. Logout,
+account changes and enterprise changes invalidate stale selections.
+Browser E2E covers cross-department lookup and account isolation.
+See `docs/adr/0010-shared-workspace-context.md`.
+
+Deferred to dedicated follow-up UX iterations: shared date range, saved
+filters, full Person summary cards, cursor-based searches/pagination beyond
+current endpoint limits, subtree (vs. direct department) filters and advanced
+keyboard navigation. The hash-based routes continue to be sufficient.
 
 ### PR #15 — Operational dashboard & analytics
 
