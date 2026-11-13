@@ -6,6 +6,7 @@ import PersonnelPanel from "./PersonnelPanel";
 import CompetencePanel from "./CompetencePanel";
 import CredentialsPanel from "./CredentialsPanel";
 import AvailabilityPanel from "./AvailabilityPanel";
+import WorkPanel from "./WorkPanel";
 
 type ReadinessResponse = {
   status: string;
@@ -90,6 +91,7 @@ export default function App() {
       <CompetencePanel />
       <CredentialsPanel />
       <AvailabilityPanel />
+      <WorkPanel />
 
       <section className="system-panel" aria-labelledby="system-title">
         <div className="section-heading">
