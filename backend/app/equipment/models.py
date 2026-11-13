@@ -170,7 +170,10 @@ class AssetPolicyProposal(Base):
         ),
         Index(
             "uq_pending_asset_credential", "asset_id", "credential_type_id",
-            unique=True, postgresql_where=text("status = 'pending' AND credential_type_id IS NOT NULL"),
+            unique=True,
+            postgresql_where=text(
+                "status = 'pending' AND credential_type_id IS NOT NULL"
+            ),
             sqlite_where=text("status = 'pending' AND credential_type_id IS NOT NULL"),
         ),
         Index(
