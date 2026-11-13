@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useWorkspace } from "./WorkspaceContext";
 import EquipmentDowntimePanel from "./EquipmentDowntimePanel";
+import EquipmentCrewSnapshot from "./EquipmentCrewSnapshot";
 
 type Asset = {
   id: string; enterprise_id: string; unit_id: string; code: string; name: string;
@@ -56,6 +57,7 @@ const kinds: Record<Asset["kind"], string> = {
 export default function EquipmentPanel() {
   const { session, enterpriseId, units } = useWorkspace();
   const admin = session?.user.role === "admin";
+  const canReviewCrew = admin || session?.user.role === "manager";
   const [assets, setAssets] = useState<Asset[]>([]);
   const [types, setTypes] = useState<CredentialType[]>([]);
   const [skills, setSkills] = useState<Skill[]>([]);
@@ -335,8 +337,9 @@ export default function EquipmentPanel() {
       </div>
       <div className="equipment-readiness" aria-label="Операционная сводка оборудования">
         <h3>Операционная сводка связанных нарядов</h3>
-        <p>Оценка только состояния актива и разрешения на работы.
-          Она не проверяет персонал и не является допуском к опасным работам.</p>
+        <p>Сводка автоматически проверяет только актив, обслуживание и разрешение.
+          Руководитель может отдельно запросить текущую проверку всей бригады.
+          Ни один показатель не является допуском к опасным работам.</p>
         {readiness && (
           <>
             <div className="equipment-readiness-kpis">
@@ -352,6 +355,10 @@ export default function EquipmentPanel() {
                 {item.software_blockers.map(code => (
                   <span key={code} className="wm-warning">{blockerNames[code] ?? code}</span>
                 ))}
+                {canReviewCrew && (
+                  <EquipmentCrewSnapshot key={rev + "-" + item.work_order_id}
+                    orderId={item.work_order_id} />
+                )}
               </div>
             ))}
             {readiness.items.length === 0 &&

@@ -1601,3 +1601,127 @@ def test_downtime_policy_interval_validation_scope_and_csrf(
     cancelled = cancel_downtime(client, asset, created.json()["id"])
     assert cancelled.status_code == 200
     assert cancel_downtime(client, asset, created.json()["id"]).status_code == 409
+
+
+# PR #20 — redacted, strictly read-only on-demand crew gate snapshot.
+
+def test_equipment_crew_readiness_redacted_and_unchanged_work_state(
+    scenario: tuple[TestClient, Session],
+) -> None:
+    client, db = scenario
+    s = seed(client)
+    asset = add_test_asset(client, s, "crew-review-20")
+    work = create_work(client, s, "crew-inspection-20")
+    link_test_asset(client, work, asset)
+    endpoint = f"{EQUIPMENT}/orders/{work['id']}/crew-readiness"
+
+    audit_before = len(db.scalars(select(WorkAuditEvent)).all())
+    snapshot = client.get(endpoint)
+    assert snapshot.status_code == 200, snapshot.text
+    data = snapshot.json()
+    assert data["gates_passed"] is False
+    assert data["leader_assigned"] is False
+    assert data["members_checked"] == 0
+    assert data["members_blocked"] == 0
+    assert data["crew_blocker_codes"] == ["LEADER_NOT_ASSIGNED"]
+    assert data["equipment_blocker_codes"] == ["WORK_PERMIT_NOT_APPROVED"]
+    assert data["read_only"] is True
+    assert data["crew_eligibility_checked"] is True
+    assert data["last_persisted_safety_check_at"] is None
+    assert {"person_id", "employee_code", "full_name", "members"} \
+        .isdisjoint(data.keys())
+    assert db.get(WorkOrder, UUID(work["id"])).status == "open"
+    assert len(db.scalars(select(WorkAuditEvent)).all()) == audit_before
+
+    verified_skills(client, s)
+    credential_id = verified_permit(client, s)
+    assert assign(client, work, s["person"]).status_code == 200
+    while_unapproved = client.get(endpoint).json()
+    assert while_unapproved["members_checked"] == 1
+    assert while_unapproved["members_blocked"] == 0
+    assert while_unapproved["gates_passed"] is False
+    assert while_unapproved["equipment_blocker_codes"] == ["WORK_PERMIT_NOT_APPROVED"]
+
+    permit = prepare_test_permit(client, work)
+    assert permit_transition(client, work, permit, "submit").status_code == 200
+    assert permit_transition(
+        client, work, permit, "approve", "wm-reviewer"
+    ).status_code == 200
+    passed = client.get(endpoint).json()
+    assert passed["leader_assigned"] is True
+    assert passed["members_checked"] == 1
+    assert passed["members_blocked"] == 0
+    assert passed["gates_passed"] is True
+    assert passed["equipment_blocker_codes"] == []
+    assert passed["crew_blocker_codes"] == []
+    assert passed["last_persisted_safety_check_at"] is None
+
+    revoked = client.post(
+        f"/api/v1/credentials/records/{credential_id}/revoke",
+        headers=auth(client),
+        json={"reason": "Synthetic issuer revocation before operational review"},
+    )
+    assert revoked.status_code == 200
+    failed = client.get(endpoint).json()
+    assert failed["gates_passed"] is False
+    assert failed["members_checked"] == 1
+    assert failed["members_blocked"] == 1
+    assert "REVOKED_CREDENTIAL" in failed["crew_blocker_codes"]
+    assert failed["last_persisted_safety_check_at"] is None
+    # Read-side discovery is not a persisted hold or execution authorization.
+    order = client.get(f"{BASE}/orders/{work['id']}").json()
+    assert order["status"] == "assigned"
+    assert order["last_safety_check_at"] is None
+
+
+def test_equipment_crew_readiness_requires_dispatch_and_both_unit_scopes(
+    scenario: tuple[TestClient, Session],
+) -> None:
+    client, _db = scenario
+    s = seed(client)
+    asset = add_test_asset(client, s, "crew-scope-20")
+    work = create_work(client, s, "crew-scope-work-20")
+    link_test_asset(client, work, asset)
+    endpoint = f"{EQUIPMENT}/orders/{work['id']}/crew-readiness"
+
+    assert client.get(endpoint).status_code == 200
+    assert client.get(
+        f"{EQUIPMENT}/orders/{s['foreign_person']}/crew-readiness"
+    ).status_code == 404
+    unlinked = create_work(client, s, "crew-unlinked-20")
+    assert client.get(
+        f"{EQUIPMENT}/orders/{unlinked['id']}/crew-readiness"
+    ).status_code == 404
+
+    auth(client, "wm-viewer")
+    assert client.get(endpoint).status_code == 403
+    auth(client, "wm-manager")
+    assert client.get(endpoint).status_code == 404
+
+    auth(client)
+    manager = next(row for row in client.get("/api/v1/auth/users").json()
+                   if row["username"] == "wm-manager")
+    post(client, "/api/v1/org/scopes", {
+        "user_id": manager["id"], "unit_id": s["unit"],
+        "include_descendants": False,
+    })
+    auth(client, "wm-manager")
+    assert client.get(endpoint).status_code == 200
+
+    auth(client)
+    outside_asset = post(
+        client, f"{EQUIPMENT}/enterprises/{s['enterprise']}/assets", {
+            "unit_id": s["other_unit"], "code": "crew-invisible-20",
+            "name": "Synthetic other-unit servo line", "kind": "production_line",
+        },
+    )
+    outside_work = create_work(client, s, "crew-invisible-work-20")
+    link_test_asset(client, outside_work, outside_asset)
+    auth(client, "wm-manager")
+    assert client.get(
+        f"{EQUIPMENT}/orders/{outside_work['id']}/crew-readiness"
+    ).status_code == 404
+    auth(client)
+    assert client.get(
+        f"{EQUIPMENT}/orders/{outside_work['id']}/crew-readiness"
+    ).status_code == 200

@@ -193,3 +193,20 @@ class DowntimeView(BaseModel):
     cancelled_at: datetime | None
     cancelled_by: UUID | None
     cancel_reason: str | None
+
+
+class CrewReadinessSnapshot(BaseModel):
+    """Redacted, on-demand result of mandatory crew/work gates, not authorization."""
+
+    work_order_id: UUID
+    work_status: str
+    checked_at: datetime
+    last_persisted_safety_check_at: datetime | None
+    leader_assigned: bool
+    members_checked: int
+    members_blocked: int
+    equipment_blocker_codes: list[str]
+    crew_blocker_codes: list[str]
+    gates_passed: bool
+    crew_eligibility_checked: Literal[True] = True
+    read_only: Literal[True] = True
