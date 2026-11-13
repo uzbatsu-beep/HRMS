@@ -1,5 +1,5 @@
 import {
-  createContext, useCallback, useContext, useEffect, useMemo, useState,
+  createContext, useCallback, useContext, useEffect, useMemo, useRef, useState,
   type Dispatch, type ReactNode, type SetStateAction,
 } from "react";
 
@@ -52,6 +52,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [unitId, writeUnit] = useState("");
   const [personId, writePerson] = useState("");
   const [person, setPerson] = useState<WorkspacePerson | null>(null);
+  const [ownPersonId, setOwnPersonId] = useState("");
+  const pendingEnterprise = useRef("");
   const [error, setError] = useState("");
 
   const refresh = useCallback(() => setRevision((value) => value + 1), []);
@@ -61,6 +63,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       // Clear all context immediately: no old user/company IDs survive logout
       // or impersonation while the new session is being established.
       setSession(null);
+      pendingEnterprise.current = "";
+      setOwnPersonId("");
       setEnterprises([]); setUnits([]); setPerson(null);
       writeEnterprise(""); writeUnit(""); writePerson("");
       setAuthRevision((value) => value + 1);
@@ -88,6 +92,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!session) {
       setEnterprises([]); setUnits([]); setPerson(null);
+      setOwnPersonId(""); pendingEnterprise.current = "";
       writeEnterprise(""); writeUnit(""); writePerson("");
       return;
     }
@@ -96,7 +101,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     // even if they have no broader organization scope.
     Promise.all([
       read<WorkspaceEnterprise[]>("/api/v1/org/enterprises", controller.signal),
-      read<{ enterprise_id: string; enterprise_name: string } | null>(
+      read<{
+        enterprise_id: string; enterprise_name: string; person_id: string;
+      } | null>(
         "/api/v1/competence/me/link", controller.signal,
       ).catch(() => null),
     ]).then(([rows, own]) => {
@@ -108,8 +115,16 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         });
       }
       setEnterprises(available);
-      writeEnterprise((old) =>
-        available.some((entry) => entry.id === old) ? old : available[0]?.id ?? "");
+      setOwnPersonId(own?.person_id ?? "");
+      const requested = pendingEnterprise.current;
+      pendingEnterprise.current = "";
+      if (requested && available.some((entry) => entry.id === requested)) {
+        writeUnit(""); writePerson(""); setPerson(null);
+        writeEnterprise(requested);
+      } else {
+        writeEnterprise((old) =>
+          available.some((entry) => entry.id === old) ? old : available[0]?.id ?? "");
+      }
       setError("");
     }).catch((cause: unknown) => {
       if (controller.signal.aborted) return;
@@ -149,23 +164,31 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       if (value.enterprise_id === enterpriseId) setPerson(value);
       else writePerson("");
     }).catch(() => {
-      // Stale, archived or no-longer-visible workers must not stay in shared
-      // navigation context after an organizational change.
-      if (!controller.signal.aborted) writePerson("");
+      // A linked employee may access their own Competence/Credentials without
+      // broader Personnel visibility; retain that validated self selection.
+      // Other inaccessible profiles are always cleared.
+      if (!controller.signal.aborted && personId !== ownPersonId) writePerson("");
     });
     return () => controller.abort();
-  }, [session?.user.id, enterpriseId, personId, revision]);
+  }, [session?.user.id, enterpriseId, personId, ownPersonId, revision]);
 
   const setEnterpriseId = useCallback<Dispatch<SetStateAction<string>>>((action) => {
     const candidate = typeof action === "function" ? action(enterpriseId) : action;
-    if (candidate && !enterprises.some((entry) => entry.id === candidate)) return;
+    if (candidate && !enterprises.some((entry) => entry.id === candidate)) {
+      // A new company may be returned by a successful POST before the global
+      // listing refreshes. Do not select it until server read access confirms.
+      pendingEnterprise.current = candidate;
+      refresh();
+      return;
+    }
+    pendingEnterprise.current = "";
     if (candidate !== enterpriseId) {
       writeUnit("");
       writePerson("");
       setPerson(null);
       writeEnterprise(candidate);
     }
-  }, [enterprises, enterpriseId]);
+  }, [enterprises, enterpriseId, refresh]);
 
   const setUnitId = useCallback<Dispatch<SetStateAction<string>>>((action) => {
     const candidate = typeof action === "function" ? action(unitId) : action;
