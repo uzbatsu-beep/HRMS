@@ -65,6 +65,7 @@ test("configurator publishes independent-approved person fields end-to-end", asy
   );
   expect(publish.status()).toBe(200);
   await page.goto("/#configuration");
+  await page.reload(); // API mutation occurs outside React; reload session and published config.
   await expect(panel).toContainText("Действующая версия:");
   await expect(panel).toContainText("v1 (с");
 
