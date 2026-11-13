@@ -60,11 +60,13 @@ export default function ConfiguratorPanel() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [noticeScope, setNoticeScope] = useState("");
+  const scopeKey = (session?.user.id ?? "") + ":" + enterpriseId;
   const [refresh, setRefresh] = useState(0);
 
   useEffect(() => {
     setVersions([]); setActive(null); setSelectedId(""); setFields([]);
-    setError(""); setNotice("");
+    setError("");
     if (!session || !enterpriseId) { setLoading(false); return; }
     let live = true;
     setLoading(true);
@@ -101,6 +103,7 @@ export default function ConfiguratorPanel() {
     try {
       const result = await task();
       setNotice(message + " Версия " + result.version + ".");
+      setNoticeScope(scopeKey);
       setRefresh((value) => value + 1);
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : "Ошибка операции");
@@ -156,7 +159,8 @@ export default function ConfiguratorPanel() {
       </div>
       {loading && <p role="status">Загрузка конфигурации…</p>}
       {error && <p role="alert" className="config-error">{error}</p>}
-      {notice && <p role="status" className="config-notice">{notice}</p>}
+      {noticeScope === scopeKey && notice &&
+        <p role="status" className="config-notice">{notice}</p>}
       {!loading && (
         <>
           <div className="config-published">
