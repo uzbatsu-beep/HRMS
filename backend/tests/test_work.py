@@ -1407,14 +1407,12 @@ def test_scoped_readiness_reports_only_asset_and_permit_software_gates(
     auth(client, "wm-viewer")
     assert client.get(endpoint).status_code == 404
     auth(client)
-    foreign_asset = add_test_asset(client, s, "readiness-hidden-18")
-    # Move the newly created asset to a different unit in a synthetic DB
-    # transaction, preserving the same enterprise and auditable work link.
-    from app.equipment.models import EquipmentAsset
-    target = db.get(EquipmentAsset, UUID(foreign_asset["id"]))
-    assert target is not None
-    target.unit_id = UUID(s["other_unit"])
-    db.commit()
+    foreign_asset = post(
+        client, f"{EQUIPMENT}/enterprises/{s['enterprise']}/assets", {
+            "unit_id": s["other_unit"], "code": "readiness-hidden-18",
+            "name": "Other-unit test robot", "kind": "robot",
+        },
+    )
     other_work = create_work(client, s, "readiness-other-unit-18")
     link_test_asset(client, other_work, foreign_asset)
     auth(client, "wm-manager")
