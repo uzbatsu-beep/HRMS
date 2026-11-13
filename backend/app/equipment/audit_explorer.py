@@ -10,7 +10,7 @@ import binascii
 from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.equipment.models import EquipmentAuditEvent
@@ -69,12 +69,20 @@ def read_page(
         query = query.where(EquipmentAuditEvent.created_at <= until)
     if cursor:
         stamp, identifier = parse_cursor(cursor)
+        # SQLite CURRENT_TIMESTAMP stores second-precision text without
+        # fractional digits, while SQLAlchemy datetime bound parameters are
+        # encoded with ".000000". A raw lexical '<' would then wrongly
+        # reinclude same-timestamp rows. Normalize both sides for SQLite
+        # fixtures. PostgreSQL retains native timestamptz/microsecond ordering.
+        if db.get_bind().dialect.name == "sqlite":
+            event_time = func.datetime(EquipmentAuditEvent.created_at)
+            cursor_time = func.datetime(stamp)
+        else:
+            event_time = EquipmentAuditEvent.created_at
+            cursor_time = stamp
         query = query.where(or_(
-            EquipmentAuditEvent.created_at < stamp,
-            and_(
-                EquipmentAuditEvent.created_at == stamp,
-                EquipmentAuditEvent.id < identifier,
-            ),
+            event_time < cursor_time,
+            and_(event_time == cursor_time, EquipmentAuditEvent.id < identifier),
         ))
     rows = db.execute(
         query.order_by(
