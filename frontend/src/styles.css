@@ -612,3 +612,48 @@ h2 { margin: 6px 0 0; font-size: 18px; letter-spacing: -.025em; }
   .wm-form,.wm-candidates,.wm-requirement-row { grid-template-columns: 1fr; }
   .wm-requirement-row button { justify-self: start; }
 }
+
+
+/* PR #11 — work execution, crew staffing and manual safety review */
+.wm-execution { margin-top: 20px; padding: 17px; background: #f9fcfa;
+  border: 1px solid #d8e5dc; border-radius: 11px; }
+.wm-execution h3 { margin-top: 0; }
+.wm-execution h4 { font-size: 12px; margin: 4px 0 10px; }
+.wm-execution-toolbar { display: flex; flex-wrap: wrap; gap: 12px;
+  align-items: center; margin: 14px 0; }
+.wm-execution-toolbar small { font-size: 10px; color: var(--muted); }
+.wm-priority { border-radius: 7px; padding: 7px 10px; font-size: 10px;
+  font-weight: 700; border: 1px solid; }
+.wm-priority.routine,.wm-priority.normal { color: #426257;
+  background: #eaf5ef; border-color: #cdded6; }
+.wm-priority.urgent { color: #8c6517; background: #fff5dc; border-color: #e8d3a7; }
+.wm-priority.critical { color: #ab3539; background: #fff0ee; border-color: #e7bab8; }
+.wm-state.on_hold { color: #a73b41; background: #ffebeb; }
+.wm-execution-detail,.wm-execution-check { padding: 13px; background: #fff;
+  border: 1px solid var(--line); border-radius: 9px; margin: 12px 0; }
+.wm-execution-detail summary { cursor: pointer; font-size: 12px; font-weight: 700; }
+.wm-crew-editor { display: grid; grid-template-columns: repeat(2,minmax(0,1fr));
+  gap: 10px; align-items: end; margin-top: 13px; }
+.wm-crew-editor > .wm-button { justify-self: start; }
+.wm-crew-roster { display: grid; gap: 7px; }
+.wm-roster-line { display: flex; align-items: center; flex-wrap: wrap; gap: 9px;
+  justify-content: space-between; padding: 10px; background: #fff;
+  border: 1px solid var(--line); border-radius: 8px; }
+.wm-roster-line strong { font-size: 11px; }
+.wm-roster-line span { font-family: monospace; font-size: 10px;
+  color: var(--muted); overflow-wrap: anywhere; }
+.wm-result { padding: 13px; margin-top: 12px; border: 1px solid;
+  border-radius: 8px; }
+.wm-result.allowed { background: #eff8f2; border-color: #bcdac6; color: #226c4a; }
+.wm-result.blocked { background: #fff1ef; border-color: #eac4bf; color: #963b43; }
+.wm-result strong { font-size: 11px; }
+.wm-result p { font-size: 11px; line-height: 1.6; margin: 7px 0; }
+.wm-member-check { margin-top: 9px; padding: 9px; background: #ffffffa6;
+  border-radius: 7px; font-size: 11px; }
+.wm-member-check b { font-weight: 700; }
+.wm-warning { font-size: 11px; color: #9d3b43; margin: 8px 0; line-height: 1.7; }
+@media(max-width:600px) {
+ .wm-execution { padding: 12px; }
+ .wm-crew-editor { grid-template-columns: 1fr; }
+ .wm-roster-line { display: grid; justify-content: stretch; }
+}

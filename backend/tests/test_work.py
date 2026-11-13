@@ -626,3 +626,381 @@ def test_future_transfer_does_not_expose_out_of_scope_worker(
     assert client.get(
         f"{BASE}/orders/{order['id']}/candidates/{s['foreign_person']}"
     ).status_code == 404
+
+
+def qualified_second_worker(client: TestClient, s: dict) -> None:
+    second = {**s, "person": s["other_person"]}
+    verified_skills(client, second)
+    verified_permit(client, second)
+
+
+def test_priority_is_audited_and_locked_after_start(
+    scenario: tuple[TestClient, Session], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, db = scenario
+    s = seed(client)
+    verified_skills(client, s)
+    verified_permit(client, s)
+    payload = work_payload(s, "prio-11")
+    payload["priority"] = "critical"
+    created = post(client, f"{BASE}/enterprises/{s['enterprise']}/orders", payload)
+    assert created["priority"] == "critical"
+    edited = client.post(
+        f"{BASE}/orders/{created['id']}/priority", headers=auth(client),
+        json={"priority": "urgent", "reason": "Machine is scheduled next week."},
+    )
+    assert edited.status_code == 200
+    assert edited.json()["priority"] == "urgent"
+    assert client.post(
+        f"{BASE}/orders/{created['id']}/priority", headers=auth(client),
+        json={"priority": "critical", "reason": "          "},
+    ).status_code == 422
+    assert assign(client, created, s["person"]).status_code == 200
+    planned = datetime.fromisoformat(created["starts_at"])
+    monkeypatch.setattr(work_service, "utcnow", lambda: planned + timedelta(minutes=5))
+    assert client.post(
+        f"{BASE}/orders/{created['id']}/start", headers=auth(client)
+    ).status_code == 200
+    assert client.post(
+        f"{BASE}/orders/{created['id']}/priority", headers=auth(client),
+        json={"priority": "routine", "reason": "A valid reason after start."},
+    ).status_code == 409
+    actions = {e.action for e in db.scalars(select(WorkAuditEvent)).all()}
+    assert "priority.changed" in actions
+
+
+def test_add_crew_checks_all_gates_and_prevents_double_staffing(
+    scenario: tuple[TestClient, Session],
+) -> None:
+    client, db = scenario
+    s = seed(client)
+    verified_skills(client, s)
+    verified_permit(client, s)
+    work = create_work(client, s, "crew-101")
+    assert assign(client, work, s["person"]).status_code == 200
+    request = {"person_id": s["other_person"], "role": "specialist"}
+    missing = client.post(
+        f"{BASE}/orders/{work['id']}/crew", headers=auth(client), json=request
+    )
+    assert missing.status_code == 409
+    assert {x["code"] for x in missing.json()["detail"]["blockers"]} >= {
+        "MISSING_VERIFIED_SKILL", "MISSING_CREDENTIAL",
+    }
+    assert len(db.scalars(select(WorkReservation)).all()) == 1
+    qualified_second_worker(client, s)
+    created = client.post(
+        f"{BASE}/orders/{work['id']}/crew", headers=auth(client), json=request
+    )
+    assert created.status_code == 201, created.text
+    data = created.json()
+    assert len(data["crew"]) == 1
+    assert data["crew"][0]["role"] == "specialist"
+    assert data["crew"][0]["person_id"] == s["other_person"]
+    assert db.get(WorkReservation, UUID(data["crew"][0]["reservation_id"])) is not None
+    assert client.post(
+        f"{BASE}/orders/{work['id']}/crew", headers=auth(client), json=request
+    ).status_code == 409
+    assert client.post(
+        f"{BASE}/orders/{work['id']}/crew", headers=auth(client),
+        json={"person_id": s["person"], "role": "assistant"},
+    ).status_code == 409
+
+
+def test_crew_blocked_by_absence_and_crew_removal_releases_reservation(
+    scenario: tuple[TestClient, Session],
+) -> None:
+    client, db = scenario
+    s = seed(client)
+    verified_skills(client, s)
+    verified_permit(client, s)
+    qualified_second_worker(client, s)
+    work = create_work(client, s, "crew-leave")
+    assert assign(client, work, s["person"]).status_code == 200
+    absence = post(
+        client, f"/api/v1/availability/resources/{s['other_resource']}/absences",
+        {
+            "starts_at": interval()[0], "ends_at": interval()[1],
+            "category": "training",
+        },
+    )
+    denied = client.post(
+        f"{BASE}/orders/{work['id']}/crew", headers=auth(client),
+        json={"person_id": s["other_person"], "role": "assistant"},
+    )
+    assert denied.status_code == 409
+    assert "ABSENT" in {x["code"] for x in denied.json()["detail"]["blockers"]}
+    assert client.post(
+        f"/api/v1/availability/absences/{absence['id']}/cancel",
+        headers=auth(client),
+    ).status_code == 200
+    added = client.post(
+        f"{BASE}/orders/{work['id']}/crew", headers=auth(client),
+        json={"person_id": s["other_person"], "role": "assistant"},
+    ).json()
+    crew = added["crew"][0]
+    removed = client.post(
+        f"{BASE}/orders/{work['id']}/crew/{crew['id']}/remove",
+        headers=auth(client),
+        json={"reason": "Training rescheduled outside planned interval."},
+    )
+    assert removed.status_code == 200, removed.text
+    assert removed.json()["crew"][0]["removed_at"] is not None
+    slot = db.get(WorkReservation, UUID(crew["reservation_id"]))
+    assert slot is not None and slot.cancelled_at is not None
+    assert client.post(
+        f"{BASE}/orders/{work['id']}/crew/{crew['id']}/remove",
+        headers=auth(client), json={"reason": "Cannot remove same crew member twice."},
+    ).status_code == 404
+
+
+def test_lead_replacement_is_atomic_and_audited(
+    scenario: tuple[TestClient, Session],
+) -> None:
+    client, db = scenario
+    s = seed(client)
+    verified_skills(client, s)
+    verified_permit(client, s)
+    qualified_second_worker(client, s)
+    work = create_work(client, s, "lead-replacement")
+    initially = assign(client, work, s["person"]).json()
+    old_reservation = initially["assignment"]["reservation_id"]
+    response = client.post(
+        f"{BASE}/orders/{work['id']}/replace-lead", headers=auth(client),
+        json={
+            "person_id": s["other_person"],
+            "reason": "Original specialist is reassigned by supervisor.",
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["assignment"]["person_id"] == s["other_person"]
+    assert response.json()["assignment"]["reservation_id"] != old_reservation
+    assert db.get(WorkReservation, UUID(old_reservation)).cancelled_at is not None
+    assert client.post(
+        f"{BASE}/orders/{work['id']}/replace-lead", headers=auth(client),
+        json={
+            "person_id": s["other_person"],
+            "reason": "Replacement cannot equal current lead.",
+        },
+    ).status_code == 409
+    assert "lead.replaced" in {
+        event.action for event in db.scalars(select(WorkAuditEvent)).all()
+    }
+
+
+def test_start_revalidates_entire_crew_and_cancel_releases_all_reservations(
+    scenario: tuple[TestClient, Session], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, db = scenario
+    s = seed(client)
+    verified_skills(client, s)
+    verified_permit(client, s)
+    qualified_second_worker(client, s)
+    work = create_work(client, s, "crew-at-start")
+    leader = assign(client, work, s["person"]).json()["assignment"]
+    crew_added = client.post(
+        f"{BASE}/orders/{work['id']}/crew", headers=auth(client),
+        json={"person_id": s["other_person"], "role": "observer"},
+    )
+    assert crew_added.status_code == 201
+    member = crew_added.json()["crew"][0]
+    last = datetime.fromisoformat(work["starts_at"])
+    monkeypatch.setattr(work_service, "utcnow", lambda: last + timedelta(minutes=5))
+    # A late absence for just the supporting observer blocks the whole crew.
+    post(client, f"/api/v1/availability/resources/{s['other_resource']}/absences", {
+        "starts_at": interval()[0], "ends_at": interval()[1],
+        "category": "unavailable",
+    })
+    cannot_start = client.post(
+        f"{BASE}/orders/{work['id']}/start", headers=auth(client)
+    )
+    assert cannot_start.status_code == 409
+    assert "ABSENT" in str(cannot_start.json())
+    canceled = client.post(
+        f"{BASE}/orders/{work['id']}/cancel", headers=auth(client)
+    )
+    assert canceled.status_code == 200, canceled.text
+    for rid in (leader["reservation_id"], member["reservation_id"]):
+        slot = db.get(WorkReservation, UUID(rid))
+        assert slot is not None and slot.cancelled_at is not None
+
+
+def test_manual_revalidation_enters_hold_and_refuses_resume_when_revoked(
+    scenario: tuple[TestClient, Session], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, db = scenario
+    s = seed(client)
+    verified_skills(client, s)
+    permit = verified_permit(client, s)
+    work = create_work(client, s, "safety-hold")
+    assert assign(client, work, s["person"]).status_code == 200
+    planned = datetime.fromisoformat(work["starts_at"])
+    monkeypatch.setattr(work_service, "utcnow", lambda: planned + timedelta(minutes=5))
+    assert client.post(
+        f"{BASE}/orders/{work['id']}/start", headers=auth(client)
+    ).status_code == 200
+    revoke = client.post(
+        f"/api/v1/credentials/records/{permit}/revoke",
+        headers=auth(client),
+        json={"reason": "Safety permit issuer revoked the qualification."},
+    )
+    assert revoke.status_code == 200
+    diagnosis = client.post(
+        f"{BASE}/orders/{work['id']}/revalidate", headers=auth(client)
+    )
+    assert diagnosis.status_code == 200, diagnosis.text
+    result = diagnosis.json()
+    assert result["passed"] is False
+    assert result["status"] == "on_hold"
+    assert "REVOKED_CREDENTIAL" in {
+        b["code"] for member in result["members"] for b in member["candidate"]["blockers"]
+    }
+    assert client.post(
+        f"{BASE}/orders/{work['id']}/complete", headers=auth(client)
+    ).status_code == 409
+    assert client.post(
+        f"{BASE}/orders/{work['id']}/resume", headers=auth(client),
+        json={"reason": "Cannot resume without a new verified permit."},
+    ).status_code == 409
+    assert db.get(WorkOrder, UUID(work["id"])).status == "on_hold"
+    assert "safety.hold" in {
+        event.action for event in db.scalars(select(WorkAuditEvent)).all()
+    }
+
+
+def test_manual_hold_can_be_resumed_after_valid_recheck(
+    scenario: tuple[TestClient, Session], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _ = scenario
+    s = seed(client)
+    verified_skills(client, s)
+    verified_permit(client, s)
+    work = create_work(client, s, "hold-resume")
+    assert assign(client, work, s["person"]).status_code == 200
+    planned = datetime.fromisoformat(work["starts_at"])
+    monkeypatch.setattr(work_service, "utcnow", lambda: planned + timedelta(minutes=5))
+    assert client.post(
+        f"{BASE}/orders/{work['id']}/start", headers=auth(client)
+    ).status_code == 200
+    held = client.post(
+        f"{BASE}/orders/{work['id']}/hold", headers=auth(client),
+        json={"reason": "Supervisor requested a documented pause for inspection."},
+    )
+    assert held.status_code == 200, held.text
+    assert held.json()["status"] == "on_hold"
+    assert client.post(
+        f"{BASE}/orders/{work['id']}/complete", headers=auth(client)
+    ).status_code == 409
+    resumed = client.post(
+        f"{BASE}/orders/{work['id']}/resume", headers=auth(client),
+        json={"reason": "Inspection completed; team credentials rechecked."},
+    )
+    assert resumed.status_code == 200, resumed.text
+    assert resumed.json()["status"] == "in_progress"
+    assert resumed.json()["last_safety_check_at"] is not None
+    completed = client.post(
+        f"{BASE}/orders/{work['id']}/complete", headers=auth(client)
+    )
+    assert completed.status_code == 200, completed.text
+    assert completed.json()["status"] == "completed"
+
+
+def test_viewer_and_csrf_denied_crew_write(
+    scenario: tuple[TestClient, Session],
+) -> None:
+    client, _ = scenario
+    s = seed(client)
+    verified_skills(client, s)
+    verified_permit(client, s)
+    work = create_work(client, s, "crew-rbac")
+    assert assign(client, work, s["person"]).status_code == 200
+    assert client.post(
+        f"{BASE}/orders/{work['id']}/crew",
+        json={"person_id": s["other_person"], "role": "specialist"},
+    ).status_code == 403
+    assert client.post(
+        f"{BASE}/orders/{work['id']}/crew",
+        headers=auth(client, "wm-viewer"),
+        json={"person_id": s["other_person"], "role": "specialist"},
+    ).status_code == 403
+    assert client.post(
+        f"{BASE}/orders/{work['id']}/hold",
+        headers=auth(client, "wm-viewer"),
+        json={"reason": "A viewer cannot pause someone else's work."},
+    ).status_code == 403
+
+
+def test_qualified_crew_can_start_and_complete(
+    scenario: tuple[TestClient, Session], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, db = scenario
+    s = seed(client)
+    verified_skills(client, s)
+    verified_permit(client, s)
+    qualified_second_worker(client, s)
+    work = create_work(client, s, "crew-success")
+    assert assign(client, work, s["person"]).status_code == 200
+    added = client.post(
+        f"{BASE}/orders/{work['id']}/crew", headers=auth(client),
+        json={"person_id": s["other_person"], "role": "specialist"},
+    )
+    assert added.status_code == 201, added.text
+    planned = datetime.fromisoformat(work["starts_at"])
+    monkeypatch.setattr(work_service, "utcnow", lambda: planned + timedelta(minutes=5))
+    started = client.post(
+        f"{BASE}/orders/{work['id']}/start", headers=auth(client)
+    )
+    assert started.status_code == 200, started.text
+    assert started.json()["status"] == "in_progress"
+    check = client.get(f"{BASE}/orders/{work['id']}/safety")
+    assert check.status_code == 200, check.text
+    assert check.json()["passed"] is True
+    assert {member["role"] for member in check.json()["members"]} == {
+        "lead", "specialist",
+    }
+    completed = client.post(
+        f"{BASE}/orders/{work['id']}/complete", headers=auth(client)
+    )
+    assert completed.status_code == 200, completed.text
+    assert completed.json()["status"] == "completed"
+    assert len(db.scalars(select(WorkReservation)).all()) == 2
+
+
+def test_invalid_crew_at_completion_persists_safety_hold_without_finishing(
+    scenario: tuple[TestClient, Session], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, db = scenario
+    s = seed(client)
+    verified_skills(client, s)
+    verified_permit(client, s)
+    qualified_second_worker(client, s)
+    work = create_work(client, s, "crew-comp-hold")
+    assert assign(client, work, s["person"]).status_code == 200
+    added = client.post(
+        f"{BASE}/orders/{work['id']}/crew", headers=auth(client),
+        json={"person_id": s["other_person"], "role": "assistant"},
+    )
+    assert added.status_code == 201, added.text
+    planned = datetime.fromisoformat(work["starts_at"])
+    monkeypatch.setattr(work_service, "utcnow", lambda: planned + timedelta(minutes=5))
+    assert client.post(
+        f"{BASE}/orders/{work['id']}/start", headers=auth(client)
+    ).status_code == 200
+    post(
+        client, f"/api/v1/availability/resources/{s['other_resource']}/absences",
+        {
+            "starts_at": interval()[0], "ends_at": interval()[1],
+            "category": "unavailable",
+        },
+    )
+    denied = client.post(
+        f"{BASE}/orders/{work['id']}/complete", headers=auth(client)
+    )
+    assert denied.status_code == 409, denied.text
+    assert "ABSENT" in str(denied.json())
+    order = db.get(WorkOrder, UUID(work["id"]))
+    db.refresh(order)
+    assert order.status == "on_hold"
+    assert order.completed_at is None
+    assert "safety.hold" in {
+        event.action for event in db.scalars(select(WorkAuditEvent)).all()
+    }

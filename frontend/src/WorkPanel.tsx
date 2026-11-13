@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import WorkExecutionPanel from "./WorkExecutionPanel";
 
 type User = { id: string; username: string; role: "admin" | "manager" | "viewer" };
 type Session = { user: User; csrf_token: string };
@@ -20,7 +21,10 @@ type Work = {
   id: string; enterprise_id: string; unit_id: string; code: string; title: string;
   description: string | null; activity_code: string;
   starts_at: string; ends_at: string;
-  status: "open" | "assigned" | "in_progress" | "completed" | "cancelled";
+  status: "open" | "assigned" | "in_progress" | "on_hold" | "completed" | "cancelled";
+  priority: "routine" | "normal" | "urgent" | "critical";
+  crew: { id: string; person_id: string; role: string; reservation_id: string; removed_at: string | null }[];
+  hold_reason: string | null; last_safety_check_at: string | null;
   required_skills: WorkRequirement[];
   assignment: WorkAssignment | null;
 };
@@ -35,7 +39,8 @@ type DraftRequirement = { skill_id: string; min_level_id: string };
 const base = "/api/v1/work";
 const statuses: Record<Work["status"], string> = {
   open: "Открыт", assigned: "Исполнитель назначен",
-  in_progress: "В работе", completed: "Выполнен", cancelled: "Отменён",
+  in_progress: "В работе", on_hold: "На удержании",
+  completed: "Выполнен", cancelled: "Отменён",
 };
 const sources: Record<string, string> = {
   person: "Сотрудник", organization: "Подразделение",
@@ -112,6 +117,7 @@ export default function WorkPanel() {
   const [description, setDescription] = useState("");
   const [unitId, setUnitId] = useState("");
   const [activityCode, setActivityCode] = useState("");
+  const [priority, setPriority] = useState<Work["priority"]>("normal");
   const [start, setStart] = useState(futureInput(24));
   const [end, setEnd] = useState(futureInput(25));
   const [required, setRequired] = useState<DraftRequirement[]>([
@@ -254,7 +260,7 @@ export default function WorkPanel() {
           unit_id: unitId, activity_code: activityCode,
           starts_at: new Date(start).toISOString(),
           ends_at: new Date(end).toISOString(),
-          required_skills: required,
+          required_skills: required, priority,
         }) },
         session.csrf_token,
       );
@@ -339,6 +345,15 @@ export default function WorkPanel() {
                     {activityCodes.map((codeItem) => <option key={codeItem} value={codeItem} />)}
                   </datalist>
                 </label>
+                <label>Приоритет
+                  <select value={priority}
+                    onChange={(e) => setPriority(e.target.value as Work["priority"])}>
+                    <option value="routine">Плановый</option>
+                    <option value="normal">Обычный</option>
+                    <option value="urgent">Срочный</option>
+                    <option value="critical">Критический</option>
+                  </select>
+                </label>
                 <label>Начало по местному времени браузера
                   <input type="datetime-local" required value={start}
                     onChange={(e) => setStart(e.target.value)} />
@@ -413,7 +428,8 @@ export default function WorkPanel() {
                     className={`wm-order ${selectedOrderId === order.id ? "selected" : ""}`}
                     onClick={() => setSelectedOrderId(order.id)}>
                     <span><strong>{order.code} · {order.title}</strong>
-                      <small>{unitName.get(order.unit_id) ?? "Подразделение"} ·
+                      <small>{order.priority.toUpperCase()} · {" "}
+                        {unitName.get(order.unit_id) ?? "Подразделение"} ·
                         {" "}{dateLabel(order.starts_at)}</small></span>
                     <span className={`wm-state ${order.status}`}>{statuses[order.status]}</span>
                   </button>
@@ -456,7 +472,7 @@ export default function WorkPanel() {
                         <button type="button" className="wm-button" disabled={busy}
                           onClick={() => action(selectedOrder.id, "complete")}>Отметить выполненным</button>
                       )}
-                      {["open", "assigned", "in_progress"].includes(selectedOrder.status) && (
+                      {["open", "assigned", "in_progress", "on_hold"].includes(selectedOrder.status) && (
                         <button type="button" className="wm-button danger" disabled={busy}
                           onClick={() => action(selectedOrder.id, "cancel")}>Отменить наряд</button>
                       )}
@@ -466,6 +482,16 @@ export default function WorkPanel() {
               ) : <p className="wm-empty">Выберите наряд в журнале.</p>}
             </div>
           </div>
+
+          {selectedOrder && (
+            <WorkExecutionPanel
+              key={selectedOrder.id}
+              order={selectedOrder}
+              csrfToken={session.csrf_token}
+              canDispatch={dispatcher}
+              onChanged={() => setRevision((old) => old + 1)}
+            />
+          )}
 
           {selectedOrder?.status === "open" && (
             <div className="wm-matching">

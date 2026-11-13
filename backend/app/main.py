@@ -13,6 +13,7 @@ from app.competence.router import router as competence_router
 from app.credentials.router import router as credentials_router
 from app.availability.router import router as availability_router
 from app.work.router import router as work_router
+from app.work.execution_router import router as work_execution_router
 
 app = FastAPI(
     title=settings.app_name,
@@ -36,6 +37,7 @@ app.include_router(competence_router)
 app.include_router(credentials_router)
 app.include_router(availability_router)
 app.include_router(work_router)
+app.include_router(work_execution_router)
 
 
 @app.get("/", tags=["system"], summary="API information")

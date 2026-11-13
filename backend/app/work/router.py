@@ -17,7 +17,7 @@ from app.organization.access import allowed_unit_ids
 from app.organization.models import Enterprise, OrganizationUnit
 from app.personnel.models import EmploymentAssignment, Person, WorkforceResource
 from app.personnel.service import require_visible_person, visible_person
-from app.work import service as work_service
+from app.work import execution, service as work_service
 from app.work.models import WorkAuditEvent, WorkOrder, WorkOrderAssignment, WorkSkillRequirement
 from app.work.schemas import (
     AssignmentCreate, CandidateView, WorkCreate, WorkAuditView, WorkView,
@@ -82,7 +82,7 @@ def create_order(
         description=payload.description.strip() if payload.description else None,
         activity_code=payload.activity_code.strip().lower(),
         starts_at=as_utc(payload.starts_at), ends_at=as_utc(payload.ends_at),
-        status="open", created_by=user.id,
+        status="open", priority=payload.priority, created_by=user.id,
     )
     db.add(order)
     work_service.flush_safe(db)
@@ -116,6 +116,8 @@ def list_orders(
             raise HTTPException(status_code=404, detail="Enterprise not found")
         query = query.where(WorkOrder.unit_id.in_(units))
     rows = db.scalars(query.order_by(WorkOrder.created_at.desc()).limit(100)).all()
+    weight = {"critical": 0, "urgent": 1, "normal": 2, "routine": 3}
+    rows = sorted(rows, key=lambda row: weight.get(row.priority, 4))
     return [work_service.view_work(db, row) for row in rows]
 
 
@@ -135,7 +137,7 @@ def list_candidates(
     db: Session = Depends(get_db),  # noqa: B008
 ) -> list[CandidateView]:
     order = read_order(db, user, order_id)
-    if order.status != "open":
+    if order.status not in {"open", "assigned"}:
         return []
     day = as_utc(order.starts_at).date()
     # Only staffing resources currently in the work's target unit; never
@@ -292,6 +294,12 @@ def start_order(
                 "blockers": [item.model_dump() for item in candidate.blockers],
             },
         )
+    full_crew = execution.team_safety_check(db, order)
+    if not full_crew.passed:
+        raise HTTPException(
+            status_code=409, detail=execution.summarize_failures(full_crew)
+        )
+    order.last_safety_check_at = full_crew.checked_at
     order.status = "in_progress"
     order.started_at = now
     work_service.audit(db, user, order, "work.started", {
@@ -323,6 +331,19 @@ def complete_order(
         raise HTTPException(status_code=404, detail="Work order not found")
     if order.status != "in_progress":
         raise HTTPException(status_code=409, detail="Only active work can be completed")
+    full_crew = execution.team_safety_check(db, order)
+    if not full_crew.passed:
+        execution.set_safety_hold(
+            order, full_crew, "Completion blocked by a failed team safety recheck"
+        )
+        work_service.audit(
+            db, user, order, "safety.hold", execution.summarize_failures(full_crew)
+        )
+        work_service.commit_safe(db)
+        raise HTTPException(
+            status_code=409, detail=execution.summarize_failures(full_crew)
+        )
+    order.last_safety_check_at = full_crew.checked_at
     order.status = "completed"
     order.completed_at = work_service.utcnow()
     work_service.audit(db, user, order, "work.completed", {})
@@ -358,6 +379,11 @@ def cancel_order(
         reservation = db.get(WorkReservation, assignment.reservation_id)
         if reservation is not None and reservation.cancelled_at is None:
             reservation.cancelled_at = now
+    for member in execution.active_crew(db, order.id):
+        member.removed_at = now
+        slot = db.get(WorkReservation, member.reservation_id)
+        if slot is not None and slot.cancelled_at is None:
+            slot.cancelled_at = now
     order.status = "cancelled"
     order.cancelled_at = now
     work_service.audit(db, user, order, "work.cancelled", {

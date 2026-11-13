@@ -18,8 +18,11 @@ from app.identity.models import UserAccount
 from app.organization.models import Enterprise
 from app.personnel.models import Person, WorkforceResource
 from app.personnel.service import current_assignment
-from app.work.models import WorkAuditEvent, WorkOrder, WorkSkillRequirement
-from app.work.schemas import Blocker, CandidateView, RequiredSkillView, WorkView, AssignmentView
+from app.work.models import WorkAuditEvent, WorkCrewMember, WorkOrder, WorkSkillRequirement
+from app.work.schemas import (
+    AssignmentView, Blocker, CandidateView, CrewMemberView, RequiredSkillView,
+    WorkView,
+)
 from app.work.models import WorkOrderAssignment
 
 UTC = timezone.utc
@@ -203,6 +206,18 @@ def view_work(db: Session, work: WorkOrder) -> WorkView:
     assignment = db.scalar(select(WorkOrderAssignment).where(
         WorkOrderAssignment.work_order_id == work.id
     ))
+    crew_rows = list(db.scalars(select(WorkCrewMember).where(
+        WorkCrewMember.work_order_id == work.id
+    ).order_by(WorkCrewMember.joined_at, WorkCrewMember.id)).all())
+    crew = [
+        CrewMemberView(
+            id=item.id, person_id=item.person_id,
+            resource_id=item.resource_id, reservation_id=item.reservation_id,
+            role=item.role, joined_at=as_utc(item.joined_at),
+            removed_at=as_utc(item.removed_at) if item.removed_at else None,
+        )
+        for item in crew_rows
+    ]
     return WorkView(
         id=work.id, enterprise_id=work.enterprise_id, unit_id=work.unit_id,
         code=work.code, title=work.title, description=work.description,
@@ -218,4 +233,10 @@ def view_work(db: Session, work: WorkOrder) -> WorkView:
             resource_id=assignment.resource_id, reservation_id=assignment.reservation_id,
             assigned_at=as_utc(assignment.assigned_at),
         ) if assignment else None,
+        priority=work.priority, crew=crew,
+        on_hold_at=as_utc(work.on_hold_at) if work.on_hold_at else None,
+        hold_reason=work.hold_reason,
+        last_safety_check_at=(
+            as_utc(work.last_safety_check_at) if work.last_safety_check_at else None
+        ),
     )
