@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
+import { useWorkspace } from "./WorkspaceContext";
 
 type Session = {
   user: { id: string; username: string; role: "admin" | "manager" | "viewer" };
@@ -78,10 +79,10 @@ export default function AvailabilityPanel() {
   const [authRevision, setAuthRevision] = useState(0);
   const [refresh, setRefresh] = useState(0);
   const [companies, setCompanies] = useState<Enterprise[]>([]);
-  const [enterpriseId, setEnterpriseId] = useState("");
+  const { enterpriseId, setEnterpriseId, personId, setPersonId } = useWorkspace();
   const [ownLink, setOwnLink] = useState<Link | null>(null);
   const [people, setPeople] = useState<Person[]>([]);
-  const [personId, setPersonId] = useState("");
+
   const [calendar, setCalendar] = useState<Calendar | null>(null);
   const [load, setLoad] = useState<Load | null>(null);
   const [checkResult, setCheckResult] = useState<Availability | null>(null);
@@ -140,8 +141,8 @@ export default function AvailabilityPanel() {
 
   useEffect(() => {
     if (!session) {
-      setCompanies([]); setEnterpriseId(""); setOwnLink(null);
-      setPeople([]); setPersonId(""); setCalendar(null);
+      setCompanies([]); setOwnLink(null);
+      setPeople([]); setCalendar(null);
       return;
     }
     let active = true;
@@ -164,7 +165,7 @@ export default function AvailabilityPanel() {
   }, [session?.user.id, refresh]);
 
   useEffect(() => {
-    if (!enterpriseId || !session) { setPeople([]); setPersonId(""); return; }
+    if (!enterpriseId || !session) { setPeople([]); return; }
     let active = true;
     request<Person[]>(
       `/api/v1/personnel/enterprises/${enterpriseId}/persons?limit=100`,
