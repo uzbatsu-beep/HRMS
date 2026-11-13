@@ -38,7 +38,6 @@ export default function AuthPanel() {
         setUser(data.user);
         setCsrf(data.csrf_token);
         setStatus("signed_in");
-      window.dispatchEvent(new Event("twm-auth-changed"));
       })
       .catch((reason: unknown) => {
         if (reason instanceof Error && reason.name === "AbortError") return;
