@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
+import { useWorkspace } from "./WorkspaceContext";
 
 type User = { id: string; role: "admin" | "manager" | "viewer"; username: string };
 type Session = { user: User; csrf_token: string };
@@ -63,10 +64,10 @@ export default function CredentialsPanel() {
   const [authRevision, setAuthRevision] = useState(0);
   const [session, setSession] = useState<Session | null>(null);
   const [enterprises, setEnterprises] = useState<Enterprise[]>([]);
-  const [enterpriseId, setEnterpriseId] = useState("");
+  const { enterpriseId, setEnterpriseId, personId, setPersonId } = useWorkspace();
   const [people, setPeople] = useState<Person[]>([]);
   const [ownLink, setOwnLink] = useState<Link | null>(null);
-  const [personId, setPersonId] = useState("");
+
   const [types, setTypes] = useState<CredentialType[]>([]);
   const [rules, setRules] = useState<Requirement[]>([]);
   const [records, setRecords] = useState<Credential[]>([]);
@@ -121,7 +122,7 @@ export default function CredentialsPanel() {
 
   useEffect(() => {
     if (!session) {
-      setEnterprises([]); setEnterpriseId(""); setOwnLink(null); setPersonId("");
+      setEnterprises([]); setOwnLink(null);
       setPeople([]); setTypes([]); setRules([]); setRecords([]); setEligibility(null);
       return;
     }
@@ -153,7 +154,7 @@ export default function CredentialsPanel() {
   useEffect(() => {
     setRecords([]); setEligibility(null);
     if (!enterpriseId || !session) {
-      setTypes([]); setRules([]); setPeople([]); setPersonId("");
+      setTypes([]); setRules([]); setPeople([]);
       return;
     }
     let active = true;
