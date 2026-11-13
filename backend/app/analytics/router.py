@@ -8,7 +8,7 @@ from collections import defaultdict
 from datetime import datetime, time, timedelta, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
@@ -112,7 +112,7 @@ def clipped_minutes(
 )
 def dashboard_summary(
     enterprise_id: UUID,
-    unit_id: UUID | None = Query(default=None),
+    unit_id: UUID | None = None,
     user: UserAccount = Depends(get_current_user),  # noqa: B008
     db: Session = Depends(get_db),  # noqa: B008
 ) -> DashboardSummary:
