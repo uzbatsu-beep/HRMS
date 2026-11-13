@@ -79,3 +79,33 @@ test("logout clears enterprise/person context before showing scoped viewer", asy
   await expect(page.getByRole("navigation", { name: "Контекстная навигация" }))
     .not.toContainText(seed.people.lead.last_name);
 });
+
+
+test("reading the access page and creating a user preserves workplace filters", async ({ page }) => {
+  const seed = demo();
+  await loginUI(page);
+  const rail = page.locator(".workspace-rail");
+  await rail.getByLabel("Предприятие").selectOption(seed.enterprise.id);
+  await rail.getByRole("button", { name: /E2E Автоматизация/ }).click();
+  await expect(rail.getByRole("button", { name: /E2E Автоматизация/ }))
+    .toHaveClass(/active/);
+  await page.goto("/#access");
+  await expect(rail.getByRole("button", { name: /E2E Автоматизация/ }))
+    .toHaveClass(/active/);
+  await expect(page.getByRole("navigation", { name: "Контекстная навигация" }))
+    .toContainText("E2E Автоматизация");
+
+  const create = page.locator(".auth-create");
+  await create.getByLabel("Логин").fill("e2e-new-" + Date.now().toString(36));
+  await create.getByLabel(/Временный пароль/).fill(process.env.E2E_ACTOR_PASSWORD!);
+  await create.getByLabel("Роль").selectOption("viewer");
+  await create.getByRole("button", { name: "Создать" }).click();
+  await expect(page.locator(".auth-success")).toContainText("создан");
+  await expect(rail.getByRole("button", { name: /E2E Автоматизация/ }))
+    .toHaveClass(/active/);
+  await page.locator(".workspace-navigation").getByRole("link", {
+    name: /Персонал/,
+  }).click();
+  await expect(page.locator("#personnel .people-filters select").nth(1))
+    .toHaveValue(seed.units.automation);
+});
