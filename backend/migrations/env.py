@@ -12,6 +12,7 @@ import app.personnel.models  # noqa: F401 - register personnel models.
 import app.competence.models  # noqa: F401 - register competence tables.
 import app.credentials.models  # noqa: F401 - register credentials tables.
 import app.availability.models  # noqa: F401 - register scheduling tables.
+import app.work.models  # noqa: F401 - register work management tables.
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))

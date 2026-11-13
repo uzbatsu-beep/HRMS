@@ -1,0 +1,109 @@
+"""Work order API: immutable requested skills and explainable safety decisions."""
+
+from datetime import datetime
+from typing import Literal
+from uuid import UUID
+
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
+
+
+class RequiredSkillCreate(BaseModel):
+    skill_id: UUID
+    min_level_id: UUID
+
+
+class RequiredSkillView(RequiredSkillCreate):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    scale_id: UUID
+    min_ordinal: int
+    skill_name: str
+
+
+class WorkCreate(BaseModel):
+    code: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_.-]+$")
+    title: str = Field(min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=3000)
+    unit_id: UUID
+    activity_code: str = Field(
+        min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_.-]+$"
+    )
+    starts_at: AwareDatetime
+    ends_at: AwareDatetime
+    required_skills: list[RequiredSkillCreate] = Field(min_length=1, max_length=20)
+
+    @model_validator(mode="after")
+    def unique_requirements(self) -> "WorkCreate":
+        ids = [row.skill_id for row in self.required_skills]
+        if len(ids) != len(set(ids)):
+            raise ValueError("Duplicate required skills are not allowed")
+        if not self.title.strip():
+            raise ValueError("Work title cannot be blank")
+        if self.ends_at <= self.starts_at:
+            raise ValueError("Work end must follow start")
+        return self
+
+
+class AssignmentView(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    person_id: UUID
+    resource_id: UUID
+    reservation_id: UUID
+    assigned_at: datetime
+
+
+class WorkView(BaseModel):
+    id: UUID
+    enterprise_id: UUID
+    unit_id: UUID
+    code: str
+    title: str
+    description: str | None
+    activity_code: str
+    starts_at: datetime
+    ends_at: datetime
+    status: Literal["open", "assigned", "in_progress", "completed", "cancelled"]
+    created_at: datetime
+    started_at: datetime | None
+    completed_at: datetime | None
+    cancelled_at: datetime | None
+    required_skills: list[RequiredSkillView]
+    assignment: AssignmentView | None
+
+
+class Blocker(BaseModel):
+    source: Literal["person", "organization", "skill", "credential", "calendar"]
+    code: str
+    message: str
+
+
+class CandidateView(BaseModel):
+    person_id: UUID
+    employee_code: str
+    full_name: str
+    resource_id: UUID | None
+    eligible: bool
+    blockers: list[Blocker]
+    verified_skills: list[UUID]
+    verified_credentials: list[UUID]
+
+
+class AssignmentCreate(BaseModel):
+    person_id: UUID
+
+
+class AssignmentDecision(BaseModel):
+    eligible: bool
+    candidate: CandidateView
+
+
+class WorkAuditView(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    enterprise_id: UUID
+    actor_user_id: UUID
+    work_order_id: UUID
+    action: str
+    details_json: str
+    created_at: datetime
