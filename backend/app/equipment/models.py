@@ -62,7 +62,8 @@ class AssetCredentialRequirement(Base):
             "asset_id", "type_id", name="uq_asset_credential_requirement"
         ),
         ForeignKeyConstraint(
-            ["enterprise_id", "asset_id"], ["equipment_assets.enterprise_id", "equipment_assets.id"],
+            ["enterprise_id", "asset_id"],
+            ["equipment_assets.enterprise_id", "equipment_assets.id"],
             name="fk_asset_requirement_asset_tenant",
         ),
         ForeignKeyConstraint(
