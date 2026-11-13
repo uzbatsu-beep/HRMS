@@ -119,6 +119,7 @@ def commit_safe(db: Session) -> None:
 def evaluate(
     db: Session, person: Person, resource: WorkforceResource,
     start: datetime, end: datetime,
+    exclude_reservation_id: UUID | None = None,
 ) -> AvailabilityResult:
     """Evaluate availability inside a transaction; no claim about credentials/skills."""
     start, end = as_utc(start), as_utc(end)
@@ -214,14 +215,15 @@ def evaluate(
             Blocker(code="ABSENT", message="The requested interval intersects unavailability")
         )
 
-    reservations = db.scalars(
-        select(WorkReservation).where(
-            WorkReservation.resource_id == resource.id,
-            WorkReservation.cancelled_at.is_(None),
-            WorkReservation.starts_at < end,
-            WorkReservation.ends_at > start,
-        )
-    ).all()
+    reservations_stmt = select(WorkReservation).where(
+        WorkReservation.resource_id == resource.id,
+        WorkReservation.cancelled_at.is_(None),
+        WorkReservation.starts_at < end,
+        WorkReservation.ends_at > start,
+    )
+    if exclude_reservation_id is not None:
+        reservations_stmt = reservations_stmt.where(WorkReservation.id != exclude_reservation_id)
+    reservations = db.scalars(reservations_stmt).all()
     if any(
         intersects(start, end, as_utc(item.starts_at), as_utc(item.ends_at))
         for item in reservations
