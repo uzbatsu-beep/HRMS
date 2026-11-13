@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -78,7 +78,8 @@ def checked_order(db: Session, user: UserAccount, order_id: UUID) -> WorkOrder:
 
 
 def ensure_editable(order: WorkOrder, allow_hold: bool = False) -> None:
-    if order.status not in ({"open", "assigned", "on_hold"} if allow_hold else {"open", "assigned"}):
+    allowed = {"open", "assigned", "on_hold"} if allow_hold else {"open", "assigned"}
+    if order.status not in allowed:
         raise HTTPException(status_code=409, detail="Work permit cannot be changed in this state")
 
 
@@ -248,7 +249,9 @@ def link_equipment(
 ) -> SafetyPackage:
     order = locked_order(db, actor, order_id)
     if order.status != "open" or service.link_for(db, order.id):
-        raise HTTPException(status_code=409, detail="Equipment must be linked once, before staffing")
+        raise HTTPException(
+            status_code=409, detail="Equipment must be linked once, before staffing"
+        )
     asset = get_asset(db, actor, payload.asset_id)
     if asset.enterprise_id != order.enterprise_id:
         raise HTTPException(status_code=404, detail="Equipment not found")
