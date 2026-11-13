@@ -14,7 +14,9 @@ from app.availability.models import ShiftRule
 from app.availability.service import as_utc, evaluate
 from app.competence.models import PersonSkillAssessment, Skill, SkillScaleLevel
 from app.credentials.service import evaluate_activity
-from app.equipment.service import required_asset_credentials, required_asset_skills
+from app.equipment.service import (
+    downtime_problems, required_asset_credentials, required_asset_skills,
+)
 from app.identity.models import UserAccount
 from app.organization.models import Enterprise
 from app.personnel.models import Person, WorkforceResource
@@ -156,6 +158,12 @@ def assess_candidate(
             )
         else:
             verified_skills.append(skill.id)
+
+    if person.enterprise_id == work.enterprise_id:
+        # Maintenance windows are hard equipment-calendar blockers before
+        # staffing and are rechecked by the team gate at work start/resume.
+        for issue in downtime_problems(db, work):
+            block("equipment", issue, "Equipment is unavailable during planned work")
 
     if person.enterprise_id == work.enterprise_id:
         # Asset-level approved skills are additive to fixed work-order skills.

@@ -11,9 +11,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.competence.models import PersonSkillAssessment, Skill, SkillScaleLevel
+from app.availability.service import as_utc
 from app.credentials.models import CredentialType, PersonCredential
 from app.equipment.models import (
-    AssetCredentialRequirement, AssetSkillRequirement, EquipmentAsset, EquipmentAuditEvent,
+    AssetCredentialRequirement, AssetSkillRequirement, AssetDowntimeWindow,
+    EquipmentAsset, EquipmentAuditEvent,
     WorkEquipmentLink, WorkPermit,
 )
 from app.identity.models import UserAccount
@@ -33,6 +35,37 @@ def latest_permit(db: Session, order_id: UUID) -> WorkPermit | None:
     ).order_by(WorkPermit.version.desc()).limit(1))
 
 
+
+def conflicting_downtime(
+    db: Session, enterprise_id: UUID, asset_id: UUID, start, end,
+) -> list[AssetDowntimeWindow]:
+    """Half-open [start, end) overlap; cancelled windows never block.
+
+    The caller must hold the enterprise lock before performing writes that
+    rely on this query. Read-side checks do not assert a future guarantee.
+    """
+    return list(db.scalars(select(AssetDowntimeWindow).where(
+        AssetDowntimeWindow.enterprise_id == enterprise_id,
+        AssetDowntimeWindow.asset_id == asset_id,
+        AssetDowntimeWindow.cancelled_at.is_(None),
+        AssetDowntimeWindow.starts_at < as_utc(end),
+        AssetDowntimeWindow.ends_at > as_utc(start),
+    ).order_by(
+        AssetDowntimeWindow.starts_at, AssetDowntimeWindow.id,
+    )).all())
+
+
+def downtime_problems(db: Session, order: WorkOrder) -> list[str]:
+    """Machine calendar is an extra gate for equipment-linked orders only."""
+    link = link_for(db, order.id)
+    if link is None:
+        return []
+    if conflicting_downtime(
+        db, order.enterprise_id, link.asset_id, order.starts_at, order.ends_at
+    ):
+        return ["EQUIPMENT_DOWNTIME_CONFLICT"]
+    return []
+
 def equipment_problems(db: Session, order: WorkOrder) -> list[str]:
     """Evaluate the newest permit every time, including start, resume and recheck."""
     link = link_for(db, order.id)
@@ -44,6 +77,7 @@ def equipment_problems(db: Session, order: WorkOrder) -> list[str]:
     reasons = []
     if asset.status != "active":
         reasons.append("EQUIPMENT_OUT_OF_SERVICE")
+    reasons.extend(downtime_problems(db, order))
     permit = latest_permit(db, order.id)
     if permit is None or permit.status != "approved" or permit.approved_by is None:
         reasons.append("WORK_PERMIT_NOT_APPROVED")

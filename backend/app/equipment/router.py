@@ -10,17 +10,20 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.availability.service import as_utc
 from app.config import settings
 from app.competence.models import Skill, SkillScaleLevel
 from app.credentials.models import CredentialType
 from app.database import get_db
 from app.equipment import service
 from app.equipment.models import (
-    AssetCredentialRequirement, AssetSkillRequirement, EquipmentAsset, EquipmentAuditEvent,
+    AssetCredentialRequirement, AssetDowntimeWindow, AssetSkillRequirement,
+    EquipmentAsset, EquipmentAuditEvent,
     WorkEquipmentLink, WorkPermit,
 )
 from app.equipment.schemas import (
     AssetCreate, AssetCredentialCreate, AssetSkillCreate, AssetSkillView,
+    DowntimeCreate, DowntimeCancel, DowntimeView,
     AssetStateChange, AssetView, EquipmentReadiness, LinkedWorkReadiness,
     EquipmentLinkCreate, PermitDraft, PermitReason, PermitView, SafetyPackage,
 )
@@ -301,6 +304,99 @@ def require_asset_skill(
     })
     work_service.commit_safe(db)
     return asset_view(db, asset)
+
+
+@router.get("/assets/{asset_id}/downtime", response_model=list[DowntimeView])
+def list_asset_downtime(
+    asset_id: UUID,
+    user: UserAccount = Depends(get_current_user),  # noqa: B008
+    db: Session = Depends(get_db),  # noqa: B008
+) -> list[AssetDowntimeWindow]:
+    asset = get_asset(db, user, asset_id)
+    return list(db.scalars(select(AssetDowntimeWindow).where(
+        AssetDowntimeWindow.enterprise_id == asset.enterprise_id,
+        AssetDowntimeWindow.asset_id == asset.id,
+    ).order_by(
+        AssetDowntimeWindow.starts_at.desc(), AssetDowntimeWindow.id.desc(),
+    ).limit(100)).all())
+
+
+@router.post(
+    "/assets/{asset_id}/downtime", response_model=DowntimeView,
+    status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_csrf)],
+)
+def schedule_asset_downtime(
+    asset_id: UUID, payload: DowntimeCreate,
+    admin: UserAccount = Depends(require_admin),  # noqa: B008
+    db: Session = Depends(get_db),  # noqa: B008
+) -> DowntimeView:
+    asset = get_asset(db, admin, asset_id)
+    work_service.lock_enterprise(db, asset.enterprise_id)
+    start, end = as_utc(payload.starts_at), as_utc(payload.ends_at)
+    if end <= datetime.now(UTC):
+        raise HTTPException(status_code=422, detail="Downtime must end in the future")
+    if service.conflicting_downtime(db, asset.enterprise_id, asset.id, start, end):
+        raise HTTPException(status_code=409, detail="Equipment downtime interval overlaps")
+    row = AssetDowntimeWindow(
+        enterprise_id=asset.enterprise_id, asset_id=asset.id,
+        starts_at=start, ends_at=end, reason=payload.reason, created_by=admin.id,
+    )
+    db.add(row)
+    work_service.flush_safe(db)
+    links = db.scalars(select(WorkEquipmentLink).where(
+        WorkEquipmentLink.enterprise_id == asset.enterprise_id,
+        WorkEquipmentLink.asset_id == asset.id,
+    )).all()
+    for link in links:
+        order = db.get(WorkOrder, link.work_order_id)
+        if (
+            order is not None and order.status == "in_progress"
+            and as_utc(order.starts_at) < end
+            and as_utc(order.ends_at) > start
+        ):
+            hold_active_work(
+                db, order, admin,
+                "Scheduled equipment downtime overlaps the work interval",
+            )
+    service.audit(db, admin, asset.enterprise_id, "asset.downtime_scheduled", row.id, {
+        "asset_id": str(asset.id), "starts_at": start.isoformat(),
+        "ends_at": end.isoformat(), "reason": row.reason,
+    })
+    work_service.commit_safe(db)
+    return DowntimeView.model_validate(row)
+
+
+@router.post(
+    "/assets/{asset_id}/downtime/{window_id}/cancel",
+    response_model=DowntimeView, dependencies=[Depends(require_csrf)],
+)
+def cancel_asset_downtime(
+    asset_id: UUID, window_id: UUID, payload: DowntimeCancel,
+    admin: UserAccount = Depends(require_admin),  # noqa: B008
+    db: Session = Depends(get_db),  # noqa: B008
+) -> DowntimeView:
+    asset = get_asset(db, admin, asset_id)
+    work_service.lock_enterprise(db, asset.enterprise_id)
+    window = db.get(AssetDowntimeWindow, window_id)
+    if (
+        window is None or window.enterprise_id != asset.enterprise_id
+        or window.asset_id != asset.id
+    ):
+        raise HTTPException(status_code=404, detail="Downtime window not found")
+    if window.cancelled_at is not None:
+        raise HTTPException(status_code=409, detail="Downtime already cancelled")
+    if as_utc(window.ends_at) <= datetime.now(UTC):
+        raise HTTPException(status_code=409, detail="Expired downtime cannot be cancelled")
+    window.cancelled_at = datetime.now(UTC)
+    window.cancelled_by = admin.id
+    window.cancel_reason = payload.reason
+    service.audit(db, admin, asset.enterprise_id, "asset.downtime_cancelled", window.id, {
+        "asset_id": str(asset.id), "reason": payload.reason,
+    })
+    # Never auto-resume a work order after cancelling a maintenance interval.
+    work_service.commit_safe(db)
+    return DowntimeView.model_validate(window)
+
 
 
 @router.post(

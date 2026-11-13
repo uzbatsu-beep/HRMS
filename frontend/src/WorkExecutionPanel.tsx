@@ -48,6 +48,7 @@ const blockerText: Record<string, string> = {
   EQUIPMENT_OUT_OF_SERVICE: "Оборудование выведено из эксплуатации",
   WORK_PERMIT_NOT_APPROVED: "Нет согласованного разрешения на работы",
   WORK_PERMIT_INCOMPLETE: "Недостаточно подтверждений по месту работ",
+  EQUIPMENT_DOWNTIME_CONFLICT: "Оборудование недоступно: запланированное обслуживание",
 };
 
 const blockerSource: Record<string, string> = {
