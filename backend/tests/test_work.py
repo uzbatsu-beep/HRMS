@@ -279,7 +279,7 @@ def test_fail_closed_explains_missing_skill_and_credentials(
     assert {row["code"] for row in denied.json()["detail"]["blockers"]} >= {
         "MISSING_VERIFIED_SKILL", "MISSING_CREDENTIAL",
     }
-    login(client)
+    auth(client)
     order = client.get(f"{BASE}/orders/{work['id']}").json()
     assert order["status"] == "open" and order["assignment"] is None
 
