@@ -7,14 +7,13 @@ import CredentialsPanel from "./CredentialsPanel";
 import AvailabilityPanel from "./AvailabilityPanel";
 import WorkPanel from "./WorkPanel";
 import ContextRail, { type PersonFocus } from "./ContextRail";
+import { useWorkspace } from "./WorkspaceContext";
+import WorkspaceSearch from "./WorkspaceSearch";
+import WorkspaceBreadcrumbs from "./WorkspaceBreadcrumbs";
 
 type ReadinessResponse = {
   status: string;
   dependencies: { database: string };
-};
-type Session = {
-  user: { id: string; username: string; role: "admin" | "manager" | "viewer" };
-  csrf_token: string;
 };
 type ApiState = "checking" | "ready" | "unavailable";
 type Page = "dashboard" | "organization" | "personnel" | "competence"
@@ -41,9 +40,7 @@ function pageFromHash(): Page {
 
 export default function App() {
   const [page, setPage] = useState<Page>(pageFromHash);
-  const [session, setSession] = useState<Session | null>(null);
-  const [authRevision, setAuthRevision] = useState(0);
-  const [personFocus, setPersonFocus] = useState<PersonFocus | null>(null);
+  const { session, focusPerson: focusWorkspacePerson } = useWorkspace();
   const [apiState, setApiState] = useState<ApiState>("checking");
   const [databaseState, setDatabaseState] = useState("Проверка...");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -53,25 +50,6 @@ export default function App() {
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
-
-  useEffect(() => {
-    const onAuth = () => setAuthRevision((old) => old + 1);
-    window.addEventListener("twm-auth-changed", onAuth);
-    return () => window.removeEventListener("twm-auth-changed", onAuth);
-  }, []);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    fetch("/api/v1/auth/me", {
-      credentials: "same-origin", signal: controller.signal,
-    }).then(async (response) => {
-      if (!response.ok) return null;
-      return await response.json() as Session;
-    }).then((data) => {
-      if (!controller.signal.aborted) setSession(data);
-    }).catch(() => { if (!controller.signal.aborted) setSession(null); });
-    return () => controller.abort();
-  }, [authRevision]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -100,7 +78,7 @@ export default function App() {
   }
 
   function focusPerson(person: PersonFocus) {
-    setPersonFocus(person);
+    focusWorkspacePerson(person.enterpriseId, person.personId, person.unitId);
     navigate("personnel");
   }
 
@@ -126,6 +104,10 @@ export default function App() {
           <span className="workspace-context">{active.label}</span>
         </div>
         <div className="workspace-top-meta">
+          <WorkspaceSearch openPerson={(person) => {
+            focusWorkspacePerson(person.enterprise_id, person.id, person.current_unit_id);
+            navigate("personnel");
+          }} />
           <span className="environment">DEVELOPMENT</span>
           <span className={"status-dot " + apiState} aria-hidden="true" />
           <span className="status-text" role="status">{statusText}</span>
@@ -156,13 +138,14 @@ export default function App() {
           <div className="nav-footer">
             <span className="nav-footer-dot" />
             <span>HRMS · развитие продукта</span>
-            <small>Модули PR #4–#11 подключены</small>
+            <small>Общий контекст предприятия · PR #14</small>
           </div>
         </aside>
 
         <main className="workspace-main" id="main-content">
           <div className="workspace-page-heading">
             <div>
+              <WorkspaceBreadcrumbs pageLabel={active.label} navigate={navigate} />
               <div className="eyebrow">TWM / {active.page.toUpperCase()}</div>
               <h1>{active.label}</h1>
               <p>{active.description}</p>
@@ -204,10 +187,7 @@ export default function App() {
             </>
           )}
           {page === "organization" && <OrganizationPanel />}
-          {page === "personnel" && <PersonnelPanel
-            contextEnterpriseId={personFocus?.enterpriseId}
-            focusedPersonId={personFocus?.personId}
-          />}
+          {page === "personnel" && <PersonnelPanel />}
           {page === "competence" && <CompetencePanel />}
           {page === "credentials" && <CredentialsPanel />}
           {page === "availability" && <AvailabilityPanel />}
