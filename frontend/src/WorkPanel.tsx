@@ -220,7 +220,7 @@ export default function WorkPanel() {
     return () => { active = false; };
   }, [selectedOrderId, selectedOrder?.status, session?.user.id, revision]);
 
-  async function change(action: () => Promise<void>, success: string) {
+  async function change(action: () => Promise<unknown>, success: string) {
     setBusy(true); setError(""); setNotice("");
     try {
       await action();
