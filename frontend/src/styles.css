@@ -891,3 +891,51 @@ h2 { margin: 6px 0 0; font-size: 18px; letter-spacing: -.025em; }
   .workspace-search-results { right: -60px; }
   .workspace-breadcrumbs { font-size: 9px; }
 }
+
+
+/* PR #15: scoped operational analytics */
+
+.ops-dashboard { display: grid; gap: 18px; }
+.ops-panel { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 20px; min-width: 0; }
+.ops-panel h2 { margin: 8px 0; font-size: 20px; }
+.ops-panel h3 { margin: 0 0 8px; font-size: 14px; }
+.ops-panel p { color: #687773; font-size: 12px; line-height: 1.6; margin: 6px 0 13px; }
+.ops-panel button { border: 0; border-radius: 7px; padding: 9px 11px; background: var(--accent-soft); color: var(--accent); font-weight: 650; font-size: 11px; cursor: pointer; }
+.ops-panel button:hover { background: #d5eae2; }
+.ops-dashboard-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.ops-dashboard-header small { color: var(--muted); font-size: 10px; }
+.ops-dashboard-header button { flex: 0 0 auto; }
+.ops-kpi-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.ops-kpi { display: flex; flex-direction: column; align-items: flex-start; min-height: 158px; padding: 17px; gap: 8px; border: 1px solid var(--line); background: #fff; border-radius: 11px; }
+.ops-kpi-label { color: #63736d; font-size: 11px; }
+.ops-kpi > strong { color: #24463c; font-size: clamp(23px, 3vw, 32px); line-height: 1.1; font-variant-numeric: tabular-nums; }
+.ops-kpi-detail { color: #84928c; font-size: 10px; line-height: 1.4; }
+.ops-kpi button { margin-top: auto; cursor: pointer; border: 0; padding: 0; background: transparent; color: var(--accent); font-size: 10px; font-weight: 700; }
+.ops-kpi-alert { border-left: 3px solid #b87835; }
+.ops-section-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.ops-chart-legend { display: flex; gap: 15px; color: #6e7d77; font-size: 10px; margin: 14px 0; }
+.ops-chart-legend span { display: flex; align-items: center; gap: 6px; }
+.ops-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+.ops-created { background: #7daba0; }
+.ops-completed { background: #284e47; }
+.ops-chart-scroll { overflow-x: auto; }
+.ops-chart { display: grid; grid-template-columns: repeat(30, minmax(10px, 1fr)); min-width: 400px; align-items: end; border-bottom: 1px solid var(--line); padding: 20px 0 0; }
+.ops-chart-day { min-width: 0; text-align: center; }
+.ops-chart-bars { height: 145px; display: flex; align-items: end; justify-content: center; gap: 1px; }
+.ops-bar { min-width: 3px; max-width: 10px; flex: 1; border-radius: 2px 2px 0 0; }
+.ops-chart-day small { display: block; min-height: 20px; padding-top: 7px; font-size: 8px; color: var(--muted); }
+.ops-status-list { display: grid; gap: 0; }
+.ops-status-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line); color: #576660; font-size: 11px; }
+.ops-status-row strong { font-variant-numeric: tabular-nums; color: #2c4039; font-size: 13px; }
+.ops-panel .ops-footnote { font-size: 10px; margin-top: 13px; }
+.ops-load-list { display: grid; gap: 18px; margin-top: 18px; }
+.ops-load-row > div:first-child { display: flex; justify-content: space-between; gap: 10px; color: #4a5e56; font-size: 11px; margin-bottom: 8px; }
+.ops-load-track { height: 6px; border-radius: 6px; background: #e9efec; overflow: hidden; }
+.ops-load-track > div { height: 100%; background: #7aaca0; border-radius: inherit; }
+.ops-empty { padding: 12px 0; color: #82918b; }
+.ops-holds { list-style: none; padding: 0; margin: 10px 0 16px; }
+.ops-holds li { display: flex; justify-content: space-between; gap: 14px; border-bottom: 1px solid var(--line); padding: 10px 0; color: #405b51; font-size: 11px; }
+.ops-priority { text-transform: uppercase; font-weight: 800; color: #a36b37; font-size: 9px; }
+@media (max-width: 1150px) { .ops-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 700px) { .ops-section-grid { grid-template-columns: 1fr; } .ops-dashboard-header { align-items: flex-start; flex-direction: column; } }
+@media (max-width: 480px) { .ops-kpi-grid { grid-template-columns: 1fr; } }

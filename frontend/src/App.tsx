@@ -10,6 +10,7 @@ import ContextRail, { type PersonFocus } from "./ContextRail";
 import { useWorkspace } from "./WorkspaceContext";
 import WorkspaceSearch from "./WorkspaceSearch";
 import WorkspaceBreadcrumbs from "./WorkspaceBreadcrumbs";
+import DashboardPanel from "./DashboardPanel";
 
 type ReadinessResponse = {
   status: string;
@@ -151,41 +152,7 @@ export default function App() {
               <p>{active.description}</p>
             </div>
           </div>
-          {page === "dashboard" && (
-            <>
-              <section className="dashboard-intro">
-                <div className="eyebrow">WORKFORCE OPERATIONS</div>
-                <h2>Управление техническими ресурсами предприятия</h2>
-                <p>Организационная структура, персонал, подтверждённые компетенции,
-                  производственные допуски, смены и технические работы — в одной среде.
-                  Для перехода к модулю используйте меню слева.</p>
-              </section>
-              {!session && (
-                <section className="workspace-info-card">
-                  <h2>Доступ к системе</h2>
-                  <p>Для работы со структурой предприятия и персоналом необходимо войти.</p>
-                  <button type="button" className="workspace-primary-action"
-                    onClick={() => navigate("access")}>Перейти к авторизации</button>
-                </section>
-              )}
-              <section className="dashboard-module-grid" aria-label="Доступные модули">
-                {navigation.filter((item) =>
-                  !["dashboard", "access", "system"].includes(item.page),
-                ).map((item) => (
-                  <button type="button" className="dashboard-module" key={item.page}
-                    onClick={() => navigate(item.page)}>
-                    <span className="workspace-nav-icon" aria-hidden="true">{item.icon}</span>
-                    <span><strong>{item.label}</strong><small>{item.description}</small></span>
-                    <span aria-hidden="true" className="dashboard-module-arrow">›</span>
-                  </button>
-                ))}
-              </section>
-              <p className="workspace-warning">
-                Среда предназначена для тестирования на синтетических данных.
-                Статус допуска в HRMS не является разрешением на опасные работы.
-              </p>
-            </>
-          )}
+          {page === "dashboard" && <DashboardPanel navigate={navigate} />}
           {page === "organization" && <OrganizationPanel />}
           {page === "personnel" && <PersonnelPanel />}
           {page === "competence" && <CompetencePanel />}
