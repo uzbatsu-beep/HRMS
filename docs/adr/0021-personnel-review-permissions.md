@@ -9,7 +9,7 @@ matrix (no new roles, no new grants by default):
 - competence.assessment.review — approve/reject pending evidence-based assessments.
 - credentials.record.review — verify/reject pending personnel credentials.
 
-Migration 0017_personnel_review_permissions updates the enumerated CHECK
+Migration 0017_personnel_review_grants updates the enumerated CHECK
 constraint in PostgreSQL. Historical equipment-specific grants are retained.
 Downgrade fails if any new grant remains, rather than silently deleting it.
 

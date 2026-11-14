@@ -1,6 +1,6 @@
 """Allow scoped independent verification of skills and personnel credentials.
 
-Revision ID: 0017_personnel_review_permissions
+Revision ID: 0017_personnel_review_grants
 Revises: 0016_scoped_policy_permissions
 """
 
@@ -8,7 +8,7 @@ from typing import Sequence, Union
 
 from alembic import op
 
-revision: str = "0017_personnel_review_permissions"
+revision: str = "0017_personnel_review_grants"
 down_revision: Union[str, None] = "0016_scoped_policy_permissions"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
