@@ -58,9 +58,10 @@ test("planned downtime is recorded, blocks linked job and can be cancelled", asy
     .selectOption(seed.enterprise.id);
   const catalog = page.locator("#equipment");
   await catalog.locator(".equipment-list button").filter({ hasText: code }).click();
-  // Scope to the selected asset's detail panel; avoid a transient second
-  // instance during workspace selection and refetch.
-  const downtime = catalog.locator(".equipment-detail > .equipment-downtime").first();
+  await expect(catalog.locator(".equipment-detail")).toContainText(code);
+  // During workspace transitions React may retain an older panel briefly.
+  // Prefer the currently rendered last detail instance instead of stale DOM.
+  const downtime = catalog.locator(".equipment-detail > .equipment-downtime").last();
   await expect(downtime).toBeVisible();
   await downtime.locator("summary").click();
   await downtime.getByLabel("Начало обслуживания")
@@ -69,7 +70,9 @@ test("planned downtime is recorded, blocks linked job and can be cancelled", asy
     .fill(localInput(new Date(begins.getTime() + 15 * 60000)));
   await downtime.getByLabel("Причина / задание на обслуживание")
     .fill("Synthetic planned robot maintenance in disposable test");
-  await downtime.getByRole("button", { name: "Зарегистрировать обслуживание" }).click();
+  const register = downtime.getByRole("button", { name: "Зарегистрировать обслуживание" });
+  await expect(register).toBeEnabled();
+  await register.click();
   await expect(downtime).toContainText("Запланировано / действует");
 
   const before = await page.request.get(
