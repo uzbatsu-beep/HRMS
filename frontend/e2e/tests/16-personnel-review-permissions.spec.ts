@@ -21,8 +21,9 @@ test("scoped technical reviewer verifies skills and credentials without admin ri
       await page.request.get(skillRoot + "/skills")
     ).json() as CompetenceSkill[];
     const skill = skills[0];
-    const scales = await (await page.request.get(skillRoot + "/scales")).json()
-      as Scale[];
+    const scales = await (
+      await page.request.get(skillRoot + "/scales")
+    ).json() as Scale[];
     const level = scales.find(x => x.id === skill.scale_id)!.levels
       .find(x => x.ordinal === 1)!;
     const types = await (await page.request.get(
