@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useWorkspace } from "./WorkspaceContext";
+import OrganizationPermissionMatrix from "./OrganizationPermissionMatrix";
 
 type User = { id: string; username: string; role: "admin" | "manager" | "viewer" };
 type Session = { user: User; csrf_token: string };
@@ -563,6 +564,11 @@ export default function OrganizationPanel() {
                       <p className="org-hint">Для этого предприятия ещё нет разрешений.</p>
                     )}
                   </div>
+                  <OrganizationPermissionMatrix
+                    key={enterpriseId}
+                    users={users} units={units}
+                    csrfToken={session?.csrf_token}
+                  />
                   <details className="org-details">
                     <summary>Журнал изменений ({events.length})</summary>
                     <div className="org-log">

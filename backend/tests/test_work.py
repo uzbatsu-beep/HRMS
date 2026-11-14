@@ -2487,3 +2487,226 @@ def test_scoped_reviewer_cannot_approve_own_proposal_and_revocation_is_immediate
             "note": "Revoked review capability cannot approve or reject",
         },
     ).status_code == 403
+
+
+# PR #25 — independent personnel review operations without global admin.
+
+
+def grant_person_review(
+    client: TestClient, db: Session, s: dict, code: str,
+    username: str = "wm-viewer",
+) -> dict:
+    user = db.scalar(select(UserAccount).where(UserAccount.username == username))
+    assert user is not None
+    return post(client, "/api/v1/org/permissions", {
+        "user_id": str(user.id), "unit_id": s["unit"], "code": code,
+    })
+
+
+def scope_person_reviewer(
+    client: TestClient, db: Session, s: dict, unit: str | None = None,
+    username: str = "wm-viewer",
+) -> None:
+    user = db.scalar(select(UserAccount).where(UserAccount.username == username))
+    assert user is not None
+    post(client, "/api/v1/org/scopes", {
+        "user_id": str(user.id), "unit_id": unit or s["unit"],
+        "include_descendants": False,
+    })
+
+
+def pending_review_assessment(client: TestClient, s: dict) -> dict:
+    return post(client, f"/api/v1/competence/persons/{s['person']}/expert-assessments", {
+        "skill_id": s["skill"], "level_id": s["level_low"],
+        "evidence": [{
+            "kind": "observation",
+            "description": "Independent synthetic PLC practical examination evidence",
+            "reference": "PR25-EXAM",
+        }],
+    })
+
+
+def pending_review_document(client: TestClient, s: dict) -> dict:
+    return post(client, f"/api/v1/credentials/enterprises/{s['enterprise']}/records", {
+        "person_id": s["person"], "type_id": s["permit"],
+        "document_reference": "PR25-EL-SAFETY",
+        "issuer": "Synthetic industrial training authority",
+        "issued_on": (date.today() - timedelta(days=30)).isoformat(),
+        "valid_from": (date.today() - timedelta(days=20)).isoformat(),
+        "expires_on": (date.today() + timedelta(days=40)).isoformat(),
+    })
+
+
+def test_scoped_viewer_can_review_skill_with_evidence_not_create_or_revoke(
+    scenario: tuple[TestClient, Session],
+) -> None:
+    client, db = scenario
+    s = seed(client)
+    review_url = f"/api/v1/personnel/persons/{s['person']}/review-capabilities"
+    assessment = pending_review_assessment(client, s)
+    endpoint = f"/api/v1/competence/assessments/{assessment['id']}/review"
+    grant = grant_person_review(client, db, s, "competence.assessment.review")
+    auth(client, "wm-viewer")
+    assert client.get(review_url).status_code == 404
+    assert client.post(endpoint, headers=auth(client, "wm-viewer"), json={
+        "decision": "approved", "note": "Scope must exist before review can succeed",
+    }).status_code == 403
+    scope_person_reviewer(client, db, s)
+    auth(client, "wm-viewer")
+    assert client.get(review_url).json() == {
+        "competence_review": True, "credential_review": False,
+    }
+    records = client.get(f"/api/v1/competence/persons/{s['person']}/assessments")
+    assert records.status_code == 200
+    assert [x["id"] for x in records.json()] == [assessment["id"]]
+    assert client.post(endpoint, headers=auth(client, "wm-viewer"), json={
+        "decision": "approved", "note": "    ",
+    }).status_code == 422
+    verified = client.post(endpoint, headers=auth(client, "wm-viewer"), json={
+        "decision": "approved",
+        "note": "Reviewed synthetic practical test and verified evidence",
+    })
+    assert verified.status_code == 200, verified.text
+    assert verified.json()["reviewed_by"] == str(grant["user_id"])
+    assert verified.json()["status"] == "approved"
+    assert client.post(endpoint, headers=auth(client, "wm-viewer"), json={
+        "decision": "rejected", "note": "Cannot decide on an approved assessment again",
+    }).status_code == 409
+    assert client.post(
+        f"/api/v1/competence/persons/{s['person']}/expert-assessments",
+        headers=auth(client, "wm-viewer"),
+        json={"skill_id": s["skill"], "level_id": s["level_low"], "evidence": []},
+    ).status_code == 403
+    # Existing administrator remains free to create next synthetic proposal.
+    another = pending_review_assessment(client, s)
+    assert client.delete(
+        "/api/v1/org/permissions/" + grant["id"], headers=auth(client),
+    ).status_code == 204
+    auth(client, "wm-viewer")
+    assert client.get(review_url).json()["competence_review"] is False
+    assert client.get(
+        f"/api/v1/competence/persons/{s['person']}/assessments",
+    ).json()[0]["id"] == assessment["id"]  # Viewer sees only approved entries.
+    assert client.post(
+        f"/api/v1/competence/assessments/{another['id']}/review",
+        headers=auth(client, "wm-viewer"),
+        json={"decision": "approved", "note": "Revoked grants deny next request"},
+    ).status_code == 403
+
+
+def test_scoped_viewer_can_verify_credential_but_cannot_revoke_or_self_review(
+    scenario: tuple[TestClient, Session],
+) -> None:
+    client, db = scenario
+    s = seed(client)
+    row = pending_review_document(client, s)
+    endpoint = f"/api/v1/credentials/records/{row['id']}/review"
+    auth(client, "wm-viewer")
+    assert client.post(endpoint, headers=auth(client, "wm-viewer"), json={
+        "decision": "verified", "note": "Viewer must hold a dedicated review grant",
+    }).status_code == 403
+    scope_person_reviewer(client, db, s)
+    grant = grant_person_review(client, db, s, "credentials.record.review")
+    auth(client, "wm-viewer")
+    caps = client.get(
+        f"/api/v1/personnel/persons/{s['person']}/review-capabilities"
+    ).json()
+    assert caps == {"competence_review": False, "credential_review": True}
+    approved = client.post(endpoint, headers=auth(client, "wm-viewer"), json={
+        "decision": "verified",
+        "note": "Independent review of the issued training permit and validity",
+    })
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["reviewed_by"] == grant["user_id"]
+    assert approved.json()["status"] == "verified"
+    assert client.post(
+        f"/api/v1/credentials/records/{row['id']}/revoke",
+        headers=auth(client, "wm-viewer"),
+        json={"reason": "Reviewer should never gain revocation privilege"},
+    ).status_code == 403
+    # Own personnel-link separation works even for holders of exact-unit grants.
+    user = db.get(UserAccount, UUID(grant["user_id"]))
+    assert user is not None
+    post(client, "/api/v1/competence/links", {
+        "user_id": str(user.id), "person_id": s["person"],
+    })
+    new = pending_review_document(client, s)
+    auth(client, "wm-viewer")
+    own_caps = client.get(
+        f"/api/v1/personnel/persons/{s['person']}/review-capabilities"
+    )
+    assert own_caps.status_code == 200
+    assert own_caps.json()["credential_review"] is False
+    assert client.post(
+        f"/api/v1/credentials/records/{new['id']}/review",
+        headers=auth(client, "wm-viewer"),
+        json={"decision": "verified", "note": "Self-document review is forbidden"},
+    ).status_code == 403
+
+
+def test_review_grants_follow_current_assignment_after_transfer(
+    scenario: tuple[TestClient, Session],
+) -> None:
+    client, db = scenario
+    s = seed(client)
+    pending = pending_review_assessment(client, s)
+    grant_person_review(client, db, s, "competence.assessment.review")
+    scope_person_reviewer(client, db, s)
+    scope_person_reviewer(client, db, s, unit=s["other_unit"])
+    auth(client, "wm-viewer")
+    url = f"/api/v1/personnel/persons/{s['person']}/review-capabilities"
+    assert client.get(url).json()["competence_review"] is True
+    # Synthetic primary transfer: org visibility survives via a second scope,
+    # but the old exact-unit permission does not follow the Person.
+    assignment = db.scalar(select(EmploymentAssignment).where(
+        EmploymentAssignment.resource_id == UUID(s["resource"]),
+    ))
+    assert assignment is not None
+    assignment.effective_to = date.today() - timedelta(days=1)
+    db.add(EmploymentAssignment(
+        enterprise_id=UUID(s["enterprise"]), resource_id=UUID(s["resource"]),
+        unit_id=UUID(s["other_unit"]), effective_from=date.today(),
+    ))
+    db.commit()
+    assert client.get(url).json()["competence_review"] is False
+    assert client.post(
+        f"/api/v1/competence/assessments/{pending['id']}/review",
+        headers=auth(client, "wm-viewer"),
+        json={
+            "decision": "approved",
+            "note": "Old department review grant must not follow transferred worker",
+        },
+    ).status_code == 403
+    assert client.get(
+        f"/api/v1/competence/persons/{s['person']}/assessments",
+    ).json() == []  # Pending assessment no longer readable by ordinary Viewer.
+
+
+def test_equipment_and_personnel_review_permissions_are_independent(
+    scenario: tuple[TestClient, Session],
+) -> None:
+    client, db = scenario
+    s = seed(client)
+    row = pending_review_document(client, s)
+    pending = pending_review_assessment(client, s)
+    scope_person_reviewer(client, db, s)
+    grant_person_review(client, db, s, "competence.assessment.review")
+    asset = add_test_asset(client, s, "separate-authorizations-25")
+    auth(client, "wm-viewer")
+    assert client.get(
+        f"{EQUIPMENT}/assets/{asset['id']}/policy-capabilities",
+    ).json() == {
+        "can_read": False, "can_propose": False, "can_review": False,
+    }
+    assert client.post(
+        f"/api/v1/credentials/records/{row['id']}/review",
+        headers=auth(client, "wm-viewer"),
+        json={"decision": "verified", "note": "Skill grant cannot approve permits"},
+    ).status_code == 403
+    assert client.post(
+        f"/api/v1/competence/assessments/{pending['id']}/review",
+        headers=auth(client, "wm-viewer"),
+        json={
+            "decision": "approved", "note": "Independent skill-only reviewer is allowed",
+        },
+    ).status_code == 200

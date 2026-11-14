@@ -14,6 +14,7 @@ from app.database import get_db
 from app.identity.models import UserAccount
 from app.identity.security import get_current_user, require_admin, require_csrf
 from app.organization.access import allowed_unit_ids, can_read_enterprise
+from app.organization.permissions import can_review_person
 from app.organization.models import Enterprise
 from app.personnel.models import EmploymentAssignment, Person, WorkforceResource
 from app.personnel.service import require_visible_person
@@ -453,7 +454,11 @@ def list_assessments(
 ) -> list[AssessmentView]:
     person = read_person(db, person_id, user)
     query = select(PersonSkillAssessment).where(PersonSkillAssessment.person_id == person.id)
-    if user.role == "viewer" and own_person_id(db, user) != person.id:
+    if (
+        user.role == "viewer"
+        and own_person_id(db, user) != person.id
+        and not can_review_person(db, user, person, "competence.assessment.review")
+    ):
         query = query.where(PersonSkillAssessment.status == "approved")
     rows = db.scalars(
         query.order_by(PersonSkillAssessment.submitted_at.desc()).limit(100)
@@ -471,14 +476,14 @@ def review_assessment(
     user: UserAccount = Depends(get_current_user),  # noqa: B008
     db: Session = Depends(get_db),  # noqa: B008
 ) -> AssessmentView:
-    if user.role not in {"admin", "manager"}:
-        raise HTTPException(status_code=403, detail="Review role required")
     record = db.get(PersonSkillAssessment, assessment_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Assessment not found")
     person = db.get(Person, record.person_id)
     if person is None or person.archived_at is not None:
         raise HTTPException(status_code=404, detail="Person not found")
+    if not can_review_person(db, user, person, "competence.assessment.review"):
+        raise HTTPException(status_code=403, detail="Assessment review permission required")
     require_visible_person(db, user, person)
     if own_person_id(db, user) == record.person_id:
         raise HTTPException(status_code=403, detail="Self-review is forbidden")

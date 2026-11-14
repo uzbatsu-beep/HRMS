@@ -85,6 +85,8 @@ class PermissionGrantCreate(BaseModel):
         "equipment.policy.read",
         "equipment.policy.propose",
         "equipment.policy.review",
+        "competence.assessment.review",
+        "credentials.record.review",
     ]
 
 
