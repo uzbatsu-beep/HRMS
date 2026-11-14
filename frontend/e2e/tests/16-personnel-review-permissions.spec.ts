@@ -17,8 +17,10 @@ test("scoped technical reviewer verifies skills and credentials without admin ri
     const person: Person = seed.people.otherUnit;
     const ent = seed.enterprise.id;
     const skillRoot = "/api/v1/competence/enterprises/" + ent;
-    const skill = (await (await page.request.get(skillRoot + "/skills")).json()
-      as CompetenceSkill[])[0];
+    const skills = await (
+      await page.request.get(skillRoot + "/skills")
+    ).json() as CompetenceSkill[];
+    const skill = skills[0];
     const scales = await (await page.request.get(skillRoot + "/scales")).json()
       as Scale[];
     const level = scales.find(x => x.id === skill.scale_id)!.levels
@@ -135,8 +137,9 @@ test("scoped technical reviewer verifies skills and credentials without admin ri
       const grants = await (await page.request.get(
         "/api/v1/org/permissions?unit_id=" + seed.units.mechanics,
       )).json() as { id: string; code: string; user_id: string }[];
-      const users = await (await page.request.get("/api/v1/auth/users")).json()
-        as { id: string; username: string }[];
+      const users = await (
+        await page.request.get("/api/v1/auth/users")
+      ).json() as { id: string; username: string }[];
       const actor = users.find(x => x.username === seed.users.viewer)!;
       const revoke = grants.find(x => x.user_id === actor.id &&
         x.code === "credentials.record.review")!;
