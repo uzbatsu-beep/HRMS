@@ -58,7 +58,9 @@ test("planned downtime is recorded, blocks linked job and can be cancelled", asy
     .selectOption(seed.enterprise.id);
   const catalog = page.locator("#equipment");
   await catalog.locator(".equipment-list button").filter({ hasText: code }).click();
-  const downtime = catalog.locator(".equipment-downtime");
+  // Scope to the selected asset's detail panel; avoid a transient second
+  // instance during workspace selection and refetch.
+  const downtime = catalog.locator(".equipment-detail > .equipment-downtime").first();
   await expect(downtime).toBeVisible();
   await downtime.locator("summary").click();
   await downtime.getByLabel("Начало обслуживания")
