@@ -257,3 +257,22 @@ the Equipment panel now renders permissions-driven maker, checker or
 read-only controls. Other HRMS modules and hardware safety gates are
 unchanged. This is only the first fine-grained RBAC vertical slice, not
 an unrestricted role-definition engine. See ADR-0020.
+
+
+### PR #25 — Scoped Competence and Credential Review (in review)
+
+The existing per-unit operation grant matrix now also covers independently
+approving/rejecting competency assessments and verifying/rejecting credential
+records. Non-admin/non-manager reviewers require BOTH normal current
+organizational Person visibility and an exact-unit grant for the Person's
+current primary assignment. A transfer invalidates prior unit grants;
+revocation applies on the next server request. Approval still requires
+evidence and credential validity, and self-review is forbidden.
+
+Existing Manager/Admin review privileges are unchanged for backward
+compatibility. No grant allows expert assessment creation, credential
+revocation, document issuance or physical plant operation. The Organization
+module contains an admin-only matrix for all five existing operation codes;
+Competence and Credentials use a Person-specific capability endpoint.
+See ADR-0021. Roles remain fixed; future work includes planning and Work
+Management operations, reviewer qualifications and role templates.

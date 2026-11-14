@@ -13,6 +13,8 @@ from app.database import get_db
 from app.identity.models import UserAccount
 from app.identity.security import get_current_user, require_admin, require_csrf
 from app.organization.access import allowed_unit_ids
+from app.organization.permissions import can_review_person
+from app.competence.models import UserPersonLink
 from app.organization.models import Enterprise, OrganizationUnit
 from app.personnel.models import (
     EmploymentAssignment,
@@ -224,6 +226,34 @@ def create_person(
     )
     commit_or_conflict(db)
     return profile_detail(db, person, admin)
+
+
+@router.get("/persons/{person_id}/review-capabilities")
+def personnel_review_capabilities(
+    person_id: UUID,
+    user: UserAccount = Depends(get_current_user),  # noqa: B008
+    db: Session = Depends(get_db),  # noqa: B008
+) -> dict[str, bool]:
+    """Return only own reviewer permissions for a visible active Person.
+
+    Does not expose other users' grants. Actual approval still re-checks
+    record status, author != reviewer, own-link and evidence/expiry rules.
+    """
+    person = db.get(Person, person_id)
+    require_visible_person(db, user, person)
+    linked = db.scalar(select(UserPersonLink.person_id).where(
+        UserPersonLink.user_id == user.id,
+    ))
+    if linked == person_id:
+        return {"competence_review": False, "credential_review": False}
+    return {
+        "competence_review": can_review_person(
+            db, user, person, "competence.assessment.review",
+        ),
+        "credential_review": can_review_person(
+            db, user, person, "credentials.record.review",
+        ),
+    }
 
 
 @router.get("/persons/{person_id}", response_model=PersonDetail)

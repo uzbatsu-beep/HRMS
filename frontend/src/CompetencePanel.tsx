@@ -96,9 +96,12 @@ export default function CompetencePanel() {
   const [evidenceDescription, setEvidenceDescription] = useState("");
   const [evidenceReference, setEvidenceReference] = useState("");
   const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
+  const [canReviewSelectedPerson, setCanReviewSelectedPerson] = useState(false);
 
   const isAdmin = session?.user.role === "admin";
-  const mayReview = session?.user.role === "admin" || session?.user.role === "manager";
+  const mayReview = canReviewSelectedPerson;
+  const maySubmitExpert = session?.user.role === "admin"
+    || session?.user.role === "manager";
   const isOwnPerson = ownLink?.person_id === selectedPerson;
   const currentSkill = skills.find((skill) => skill.id === assessmentSkill);
   const currentScale = scales.find((scale) => scale.id === currentSkill?.scale_id);
@@ -217,6 +220,20 @@ export default function CompetencePanel() {
     setAssessmentLevel((old) =>
       currentScale?.levels.some((item) => item.id === old) ? old : first);
   }, [assessmentSkill, currentScale?.id]);
+
+  useEffect(() => {
+    let mounted = true;
+    setCanReviewSelectedPerson(false);
+    if (!selectedPerson || !session) return;
+    api<{ competence_review: boolean }>(
+      "/api/v1/personnel/persons/" + selectedPerson + "/review-capabilities",
+    ).then(result => {
+      if (mounted) setCanReviewSelectedPerson(result.competence_review);
+    }).catch(() => {
+      if (mounted) setCanReviewSelectedPerson(false);
+    });
+    return () => { mounted = false; };
+  }, [selectedPerson, session?.user.id, refresh]);
 
   useEffect(() => {
     if (!selectedPerson || !session) { setAssessments([]); return; }
@@ -592,7 +609,7 @@ export default function CompetencePanel() {
                 </select>
               </label>
 
-              {selectedPerson && (mayReview || isOwnPerson) && (
+              {selectedPerson && (maySubmitExpert || isOwnPerson) && (
                 <form className="skill-form skill-assess-form" onSubmit={addAssessment}>
                   <h4>Новая оценка (статус «На проверке»)</h4>
 <label>Источник оценки

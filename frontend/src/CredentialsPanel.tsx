@@ -93,9 +93,10 @@ export default function CredentialsPanel() {
   const [validFrom, setValidFrom] = useState(localDate());
   const [expires, setExpires] = useState("");
   const [notes, setNotes] = useState<Record<string, string>>({});
+  const [canReviewSelectedPerson, setCanReviewSelectedPerson] = useState(false);
 
   const admin = session?.user.role === "admin";
-  const reviewer = admin || session?.user.role === "manager";
+  const reviewer = canReviewSelectedPerson;
   const typeById = new Map(types.map((type) => [type.id, type]));
   const activeRecordType = typeById.get(recordType);
 
@@ -185,6 +186,20 @@ export default function CredentialsPanel() {
     void load();
     return () => { active = false; };
   }, [enterpriseId, session?.user.id, revision, ownLink?.person_id]);
+
+  useEffect(() => {
+    let mounted = true;
+    setCanReviewSelectedPerson(false);
+    if (!personId || !session) return;
+    request<{ credential_review: boolean }>(
+      "/api/v1/personnel/persons/" + personId + "/review-capabilities",
+    ).then(result => {
+      if (mounted) setCanReviewSelectedPerson(result.credential_review);
+    }).catch(() => {
+      if (mounted) setCanReviewSelectedPerson(false);
+    });
+    return () => { mounted = false; };
+  }, [personId, session?.user.id, revision]);
 
   useEffect(() => {
     setEligibility(null);

@@ -23,6 +23,7 @@ from app.database import get_db
 from app.identity.models import UserAccount
 from app.identity.security import get_current_user, require_admin, require_csrf
 from app.organization.access import can_read_enterprise
+from app.organization.permissions import can_review_person
 from app.organization.models import Enterprise
 from app.personnel.models import Person, WorkforceResource
 from app.personnel.service import require_visible_person
@@ -235,8 +236,6 @@ def review_record(
     reviewer: UserAccount = Depends(get_current_user),  # noqa: B008
     db: Session = Depends(get_db),  # noqa: B008
 ) -> PersonCredential:
-    if reviewer.role not in {"admin", "manager"}:
-        raise HTTPException(status_code=403, detail="Review permissions required")
     record = db.get(PersonCredential, record_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Credential not found")
@@ -249,6 +248,8 @@ def review_record(
     db.refresh(person)
     if person.archived_at is not None:
         raise HTTPException(status_code=409, detail="Person is archived")
+    if not can_review_person(db, reviewer, person, "credentials.record.review"):
+        raise HTTPException(status_code=403, detail="Credential review permission required")
     resource = db.scalar(
         select(WorkforceResource).where(WorkforceResource.person_id == person.id)
     )

@@ -125,7 +125,8 @@ class UserUnitPermission(Base):
         ),
         CheckConstraint(
             "code IN ('equipment.policy.read', 'equipment.policy.propose', "
-            "'equipment.policy.review')",
+            "'equipment.policy.review', 'competence.assessment.review', "
+            "'credentials.record.review')",
             name="ck_unit_permission_code",
         ),
     )
