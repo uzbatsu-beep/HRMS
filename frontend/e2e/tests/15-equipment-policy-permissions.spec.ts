@@ -93,8 +93,10 @@ test("scoped engineer and safety reviewer use policy matrix without admin rights
       await editor.getByRole("button", { name: "Предложить требование к навыку" })
         .click();
       await expect(editor).toContainText("Ожидает утверждения");
-      const pending = (await (await managerPage.request.get(proposalUrl)).json()
-        as Policy[]).find(x => x.status === "pending");
+      const candidatePolicies = await (
+        await managerPage.request.get(proposalUrl)
+      ).json() as Policy[];
+      const pending = candidatePolicies.find(x => x.status === "pending");
       expect(pending).toBeDefined();
 
       await loginUI(reviewerPage, seed.users.viewer, actorPass);
@@ -115,8 +117,10 @@ test("scoped engineer and safety reviewer use policy matrix without admin rights
         .fill("Independent safety review confirms required skill threshold");
       await review.getByRole("button", { name: "Утвердить" }).click();
       await expect(review).toContainText("Утверждено");
-      const latest = (await (await reviewerPage.request.get(proposalUrl)).json()
-        as Policy[])[0];
+      const approvedPolicies = await (
+        await reviewerPage.request.get(proposalUrl)
+      ).json() as Policy[];
+      const latest = approvedPolicies[0];
       expect(latest.reviewed_by).not.toBe(latest.proposed_by);
       const reviewerAuth = await reviewerPage.request.get("/api/v1/auth/me");
       const reviewCsrf = (await reviewerAuth.json() as { csrf_token: string }).csrf_token;
