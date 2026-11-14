@@ -18,14 +18,14 @@ from app.organization.models import (
     OrganizationAuditEvent,
     OrganizationUnit,
     OrganizationUnitType,
-    UserUnitScope,
+    UserUnitScope, UserUnitPermission,
 )
 from app.organization.schemas import (
     AuditEventView,
     EnterpriseCreate,
     EnterpriseView,
     ScopeGrantCreate,
-    ScopeView,
+    ScopeView, PermissionGrantCreate, PermissionGrantView,
     UnitCreate,
     UnitTypeCreate,
     UnitTypeView,
@@ -390,6 +390,83 @@ def revoke_scope(
     db.delete(grant)
     commit_or_conflict(db)
 
+
+
+
+@router.get("/permissions", response_model=list[PermissionGrantView])
+def list_permissions(
+    user_id: UUID | None = None,
+    unit_id: UUID | None = None,
+    _admin: UserAccount = Depends(require_admin),  # noqa: B008
+    db: Session = Depends(get_db),  # noqa: B008
+) -> list[UserUnitPermission]:
+    """Admin-only matrix; never returned to a normal workspace user."""
+    query = select(UserUnitPermission)
+    if user_id is not None:
+        query = query.where(UserUnitPermission.user_id == user_id)
+    if unit_id is not None:
+        query = query.where(UserUnitPermission.unit_id == unit_id)
+    return list(db.scalars(query.order_by(
+        UserUnitPermission.unit_id, UserUnitPermission.user_id,
+        UserUnitPermission.code,
+    ).limit(250)).all())
+
+
+@router.post(
+    "/permissions", response_model=PermissionGrantView,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_csrf)],
+)
+def grant_permission(
+    payload: PermissionGrantCreate,
+    admin: UserAccount = Depends(require_admin),  # noqa: B008
+    db: Session = Depends(get_db),  # noqa: B008
+) -> UserUnitPermission:
+    user = db.get(UserAccount, payload.user_id)
+    unit = db.get(OrganizationUnit, payload.unit_id)
+    if user is None or not user.is_active or user.role == "admin":
+        raise HTTPException(status_code=422, detail="Target must be an active non-admin")
+    if unit is None:
+        raise HTTPException(status_code=422, detail="Organization unit not found")
+    lock_enterprise(db, unit.enterprise_id)
+    if db.scalar(select(UserUnitPermission.id).where(
+        UserUnitPermission.user_id == user.id,
+        UserUnitPermission.unit_id == unit.id,
+        UserUnitPermission.code == payload.code,
+    )) is not None:
+        raise HTTPException(status_code=409, detail="Permission already granted")
+    grant = UserUnitPermission(
+        user_id=user.id, unit_id=unit.id, code=payload.code, granted_by=admin.id,
+    )
+    db.add(grant)
+    flush_or_conflict(db)
+    audit(db, admin, unit.enterprise_id, "permission.granted", grant.id, {
+        "user_id": str(user.id), "unit_id": str(unit.id), "code": grant.code,
+    })
+    commit_or_conflict(db)
+    db.refresh(grant)
+    return grant
+
+
+@router.delete(
+    "/permissions/{grant_id}", status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_csrf)],
+)
+def revoke_permission(
+    grant_id: UUID,
+    admin: UserAccount = Depends(require_admin),  # noqa: B008
+    db: Session = Depends(get_db),  # noqa: B008
+) -> None:
+    grant = db.get(UserUnitPermission, grant_id)
+    if grant is None:
+        raise HTTPException(status_code=404, detail="Permission not found")
+    unit = unit_or_404(db, grant.unit_id)
+    lock_enterprise(db, unit.enterprise_id)
+    audit(db, admin, unit.enterprise_id, "permission.revoked", grant.id, {
+        "user_id": str(grant.user_id), "unit_id": str(unit.id), "code": grant.code,
+    })
+    db.delete(grant)
+    commit_or_conflict(db)
 
 @router.get("/audit", response_model=list[AuditEventView])
 def list_audit(
