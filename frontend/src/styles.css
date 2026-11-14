@@ -1071,3 +1071,12 @@ h2 { margin: 6px 0 0; font-size: 18px; letter-spacing: -.025em; }
 .equipment-policy-versions > div { padding: 8px 10px; border: 1px solid var(--line);
   border-radius: 6px; font-size: 11px; }
 .equipment-policy-versions small { color: #687a71; }
+
+
+/* PR #24: exact-unit permission matrix (non-admin policy operations only) */
+.equipment-permission-matrix { border: 1px solid var(--line); border-radius: 8px;
+  padding: 14px; display: grid; gap: 10px; margin: 14px 0; }
+.equipment-permission-list { display: grid; gap: 8px; }
+.equipment-permission-list > div { display: flex; justify-content: space-between;
+  align-items: center; flex-wrap: wrap; gap: 8px; padding: 9px;
+  border: 1px solid var(--line); border-radius: 5px; }

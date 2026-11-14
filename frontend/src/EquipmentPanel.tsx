@@ -4,6 +4,7 @@ import EquipmentDowntimePanel from "./EquipmentDowntimePanel";
 import EquipmentCrewSnapshot from "./EquipmentCrewSnapshot";
 import EquipmentAuditExplorer from "./EquipmentAuditExplorer";
 import EquipmentPolicyPanel from "./EquipmentPolicyPanel";
+import EquipmentPermissionMatrix from "./EquipmentPermissionMatrix";
 
 type Asset = {
   id: string; enterprise_id: string; unit_id: string; code: string; name: string;
@@ -90,30 +91,30 @@ export default function EquipmentPanel() {
         if (!response.ok) throw new Error("HTTP " + response.status);
         return await response.json() as Asset[];
       }),
-      admin ? fetch(
+      fetch(
         "/api/v1/credentials/enterprises/" + enterpriseId + "/types", {
           credentials: "same-origin", signal: controller.signal,
         },
       ).then(async response => {
         if (!response.ok) throw new Error("Credential types HTTP " + response.status);
         return await response.json() as CredentialType[];
-      }) : Promise.resolve([] as CredentialType[]),
-      admin ? fetch(
+      }),
+      fetch(
         "/api/v1/competence/enterprises/" + enterpriseId + "/skills", {
           credentials: "same-origin", signal: controller.signal,
         },
       ).then(async response => {
         if (!response.ok) throw new Error("Skills HTTP " + response.status);
         return await response.json() as Skill[];
-      }) : Promise.resolve([] as Skill[]),
-      admin ? fetch(
+      }),
+      fetch(
         "/api/v1/competence/enterprises/" + enterpriseId + "/scales", {
           credentials: "same-origin", signal: controller.signal,
         },
       ).then(async response => {
         if (!response.ok) throw new Error("Scales HTTP " + response.status);
         return await response.json() as Scale[];
-      }) : Promise.resolve([] as Scale[]),
+      }),
       fetch(root + "/readiness", {
         credentials: "same-origin", signal: controller.signal,
       }).then(async response => {
@@ -260,9 +261,7 @@ export default function EquipmentPanel() {
                 </ul>
               ) : <p>Специфические навыки оборудования ещё не заданы.
                 Требования самого наряда сохраняются.</p>}
-              {admin && (
-                <>
-                  <EquipmentPolicyPanel
+              <EquipmentPolicyPanel
                     key={asset.id}
                     assetId={asset.id}
                     actorId={session.user.id}
@@ -274,6 +273,12 @@ export default function EquipmentPanel() {
                     activeSkillIds={asset.required_skills.map(x => x.skill_id)}
                     activeSkills={asset.required_skills}
                     onChanged={() => setRev(x => x + 1)}
+                  />
+              {admin && (
+                <>
+                  <EquipmentPermissionMatrix
+                    key={"permission-" + asset.id}
+                    unitId={asset.unit_id} csrfToken={csrf}
                   />
                   <label>Причина смены состояния (не менее 10 символов)
                     <textarea value={reason} minLength={10} maxLength={400}

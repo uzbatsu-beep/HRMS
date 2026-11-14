@@ -33,6 +33,7 @@ from app.equipment.schemas import (
 from app.identity.models import UserAccount
 from app.identity.security import get_current_user, require_admin, require_csrf
 from app.organization.access import allowed_unit_ids
+from app.organization import permissions
 from app.organization.models import Enterprise, OrganizationUnit
 from app.work import service as work_service
 from app.work.models import WorkOrder
@@ -245,6 +246,35 @@ def legacy_skill_policy(
     raise HTTPException(status_code=409, detail="Use /policy-proposals and independent approval")
 
 
+def require_policy_asset(
+    db: Session, user: UserAccount, asset_id: UUID, permission_code: str,
+) -> EquipmentAsset:
+    """Unit visibility AND exact operation permission. No role-based escalation."""
+    asset = get_asset(db, user, asset_id)
+    unit = db.get(OrganizationUnit, asset.unit_id)
+    has_permission = (
+        permissions.capabilities(db, user, unit)["can_read"]
+        if unit is not None and permission_code == "equipment.policy.read"
+        else unit is not None and permissions.can(db, user, unit, permission_code)
+    )
+    if not has_permission:
+        raise HTTPException(status_code=403, detail="Equipment policy permission required")
+    return asset
+
+
+@router.get("/assets/{asset_id}/policy-capabilities")
+def policy_capabilities(
+    asset_id: UUID,
+    user: UserAccount = Depends(get_current_user),  # noqa: B008
+    db: Session = Depends(get_db),  # noqa: B008
+) -> dict[str, bool]:
+    asset = get_asset(db, user, asset_id)
+    unit = db.get(OrganizationUnit, asset.unit_id)
+    if unit is None:
+        raise HTTPException(status_code=404, detail="Equipment not found")
+    return permissions.capabilities(db, user, unit)
+
+
 def validate_policy(
     db: Session, asset: EquipmentAsset,
     kind: str, credential_type_id: UUID | None,
@@ -316,11 +346,11 @@ def validate_skill_upgrade(
 )
 def skill_policy_revision_history(
     asset_id: UUID,
-    admin: UserAccount = Depends(require_admin),  # noqa: B008
+    user: UserAccount = Depends(get_current_user),  # noqa: B008
     db: Session = Depends(get_db),  # noqa: B008
 ) -> list[SkillPolicyRevisionView]:
     """Admin-only read: synthetic v1 from immutable baseline plus approved revisions."""
-    asset = get_asset(db, admin, asset_id)
+    asset = require_policy_asset(db, user, asset_id, "equipment.policy.read")
     requirements = db.scalars(select(AssetSkillRequirement).where(
         AssetSkillRequirement.enterprise_id == asset.enterprise_id,
         AssetSkillRequirement.asset_id == asset.id,
@@ -356,10 +386,10 @@ def skill_policy_revision_history(
 )
 def list_asset_policy_proposals(
     asset_id: UUID,
-    admin: UserAccount = Depends(require_admin),  # noqa: B008
+    user: UserAccount = Depends(get_current_user),  # noqa: B008
     db: Session = Depends(get_db),  # noqa: B008
 ) -> list[AssetPolicyProposal]:
-    asset = get_asset(db, admin, asset_id)
+    asset = require_policy_asset(db, user, asset_id, "equipment.policy.read")
     return list(db.scalars(select(AssetPolicyProposal).where(
         AssetPolicyProposal.enterprise_id == asset.enterprise_id,
         AssetPolicyProposal.asset_id == asset.id,
@@ -375,10 +405,10 @@ def list_asset_policy_proposals(
 )
 def submit_asset_policy_proposal(
     asset_id: UUID, payload: PolicyProposalCreate,
-    admin: UserAccount = Depends(require_admin),  # noqa: B008
+    actor: UserAccount = Depends(get_current_user),  # noqa: B008
     db: Session = Depends(get_db),  # noqa: B008
 ) -> PolicyProposalView:
-    asset = get_asset(db, admin, asset_id)
+    asset = require_policy_asset(db, actor, asset_id, "equipment.policy.propose")
     work_service.lock_enterprise(db, asset.enterprise_id)
     if payload.kind == "skill_upgrade":
         skill, level, _requirement, _version = validate_skill_upgrade(
@@ -417,11 +447,11 @@ def submit_asset_policy_proposal(
         scale_id=skill.scale_id if skill else None,
         min_level_id=level.id if level else None,
         reason=payload.reason, expected_version=payload.expected_version,
-        proposed_by=admin.id,
+        proposed_by=actor.id,
     )
     db.add(row)
     work_service.flush_safe(db)
-    service.audit(db, admin, asset.enterprise_id, "policy.proposed", row.id, {
+    service.audit(db, actor, asset.enterprise_id, "policy.proposed", row.id, {
         "asset_id": str(asset.id), "kind": row.kind,
         "reason": row.reason,
     })
@@ -430,16 +460,16 @@ def submit_asset_policy_proposal(
 
 
 def locked_policy(
-    db: Session, admin: UserAccount, asset_id: UUID, proposal_id: UUID,
+    db: Session, actor: UserAccount, asset_id: UUID, proposal_id: UUID,
 ) -> tuple[EquipmentAsset, AssetPolicyProposal]:
-    asset = get_asset(db, admin, asset_id)
+    asset = require_policy_asset(db, actor, asset_id, "equipment.policy.review")
     work_service.lock_enterprise(db, asset.enterprise_id)
     row = db.get(AssetPolicyProposal, proposal_id)
     if row is None or row.enterprise_id != asset.enterprise_id or row.asset_id != asset.id:
         raise HTTPException(status_code=404, detail="Policy proposal not found")
     if row.status != "pending":
         raise HTTPException(status_code=409, detail="Policy proposal already reviewed")
-    if row.proposed_by == admin.id:
+    if row.proposed_by == actor.id:
         raise HTTPException(status_code=403, detail="Independent administrator required")
     return asset, row
 
@@ -450,10 +480,10 @@ def locked_policy(
 )
 def approve_asset_policy_proposal(
     asset_id: UUID, proposal_id: UUID, payload: PolicyReview,
-    admin: UserAccount = Depends(require_admin),  # noqa: B008
+    actor: UserAccount = Depends(get_current_user),  # noqa: B008
     db: Session = Depends(get_db),  # noqa: B008
 ) -> AssetView:
-    asset, row = locked_policy(db, admin, asset_id, proposal_id)
+    asset, row = locked_policy(db, actor, asset_id, proposal_id)
     if row.kind == "skill_upgrade":
         skill, level, requirement, current_version = validate_skill_upgrade(
             db, asset, row.skill_id, row.min_level_id, row.expected_version,
@@ -466,24 +496,24 @@ def approve_asset_policy_proposal(
     if row.kind == "credential":
         db.add(AssetCredentialRequirement(
             enterprise_id=asset.enterprise_id, asset_id=asset.id,
-            type_id=cred.id, added_by=admin.id,
+            type_id=cred.id, added_by=actor.id,
         ))
     elif row.kind == "skill":
         # Never permit a stored proposal to weaken or replace existing rules.
         db.add(AssetSkillRequirement(
             enterprise_id=asset.enterprise_id, asset_id=asset.id,
             skill_id=skill.id, scale_id=skill.scale_id,
-            min_level_id=level.id, added_by=admin.id,
+            min_level_id=level.id, added_by=actor.id,
         ))
     else:
         db.add(AssetSkillPolicyRevision(
             enterprise_id=asset.enterprise_id, requirement_id=requirement.id,
             version=current_version + 1,
             scale_id=skill.scale_id, min_level_id=level.id,
-            proposal_id=row.id, approved_by=admin.id, approved_at=datetime.now(UTC),
+            proposal_id=row.id, approved_by=actor.id, approved_at=datetime.now(UTC),
         ))
     row.status = "approved"
-    row.reviewed_by = admin.id
+    row.reviewed_by = actor.id
     row.reviewed_at = datetime.now(UTC)
     row.review_note = payload.note
     work_service.flush_safe(db)
@@ -495,7 +525,7 @@ def approve_asset_policy_proposal(
         order = db.get(WorkOrder, link.work_order_id)
         if order is not None and order.status == "in_progress":
             hold_active_work(
-                db, order, admin,
+                db, order, actor,
                 "Independently approved equipment policy changed during work",
             )
     action = (
@@ -503,14 +533,14 @@ def approve_asset_policy_proposal(
         else "asset.skill_threshold_raised" if row.kind == "skill_upgrade"
         else "asset.skill_required"
     )
-    service.audit(db, admin, asset.enterprise_id, action, asset.id, {
+    service.audit(db, actor, asset.enterprise_id, action, asset.id, {
         "proposal_id": str(row.id), "kind": row.kind,
         "type_id": str(cred.id) if cred else None,
         "skill_id": str(skill.id) if skill else None,
         "min_level_id": str(level.id) if level else None,
         "version": current_version + 1 if row.kind == "skill_upgrade" else 1,
     })
-    service.audit(db, admin, asset.enterprise_id, "policy.approved", row.id, {
+    service.audit(db, actor, asset.enterprise_id, "policy.approved", row.id, {
         "asset_id": str(asset.id), "kind": row.kind, "note": payload.note,
     })
     work_service.commit_safe(db)
@@ -523,15 +553,15 @@ def approve_asset_policy_proposal(
 )
 def reject_asset_policy_proposal(
     asset_id: UUID, proposal_id: UUID, payload: PolicyReview,
-    admin: UserAccount = Depends(require_admin),  # noqa: B008
+    actor: UserAccount = Depends(get_current_user),  # noqa: B008
     db: Session = Depends(get_db),  # noqa: B008
 ) -> PolicyProposalView:
-    asset, row = locked_policy(db, admin, asset_id, proposal_id)
+    asset, row = locked_policy(db, actor, asset_id, proposal_id)
     row.status = "rejected"
-    row.reviewed_by = admin.id
+    row.reviewed_by = actor.id
     row.reviewed_at = datetime.now(UTC)
     row.review_note = payload.note
-    service.audit(db, admin, asset.enterprise_id, "policy.rejected", row.id, {
+    service.audit(db, actor, asset.enterprise_id, "policy.rejected", row.id, {
         "asset_id": str(asset.id), "kind": row.kind, "note": payload.note,
     })
     work_service.commit_safe(db)

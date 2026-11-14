@@ -52,6 +52,9 @@ export default function EquipmentPolicyPanel({
   assetId, actorId, csrfToken, types, skills, scales,
   activeCredentialIds, activeSkillIds, activeSkills, onChanged,
 }: Props) {
+  const [rights, setRights] = useState<{
+    can_read: boolean; can_propose: boolean; can_review: boolean;
+  } | null>(null);
   const [proposals, setProposals] = useState<Policy[]>([]);
   const [skillHistory, setSkillHistory] = useState<SkillHistory[]>([]);
   const [upgradeSkillId, setUpgradeSkillId] = useState("");
@@ -75,6 +78,18 @@ export default function EquipmentPolicyPanel({
 
   useEffect(() => {
     let active = true;
+    setRights(null);
+    api<{ can_read: boolean; can_propose: boolean; can_review: boolean }>(
+      root + assetId + "/policy-capabilities",
+    ).then(x => { if (active) setRights(x); }).catch((cause: unknown) => {
+      if (active) setError(cause instanceof Error ? cause.message : "Нет доступа");
+    });
+    return () => { active = false; };
+  }, [assetId, revision]);
+
+  useEffect(() => {
+    if (!rights?.can_read) return;
+    let active = true;
     setError("");
     Promise.all([
       api<Policy[]>(endpoint),
@@ -87,7 +102,7 @@ export default function EquipmentPolicyPanel({
       );
     });
     return () => { active = false; };
-  }, [assetId, endpoint, revision]);
+  }, [assetId, endpoint, revision, rights?.can_read]);
 
   async function mutate(path: string, data: object, message: string) {
     if (!csrfToken) return;
@@ -106,16 +121,20 @@ export default function EquipmentPolicyPanel({
 
   const isReasonValid = reason.trim().length >= 10;
   const isReviewValid = reviewNote.trim().length >= 10;
+  if (!rights?.can_read) return null;
 
   return (
     <section className="equipment-policy" aria-label="Согласование требований оборудования">
       <h4>Согласование новых требований</h4>
+      <p>Разрешения: {rights.can_propose ? "создавать заявки · " : ""}
+        {rights.can_review ? "согласовывать · " : ""}просматривать историю.</p>
       <p>Новые компетенции и допуски вступают в силу только после
-        независимого утверждения другим администратором.
+        независимого утверждения другим уполномоченным пользователем.
         До согласования текущие ограничения остаются без изменений.</p>
       {error && <p role="alert" className="equipment-error">{error}</p>}
       {notice && <p role="status" className="equipment-notice">{notice}</p>}
 
+      {rights.can_propose && (<>
       <label>Обоснование нового требования (не менее 10 символов)
         <textarea value={reason} minLength={10} maxLength={400}
           onChange={e => setReason(e.target.value)} />
@@ -205,6 +224,7 @@ export default function EquipmentPolicyPanel({
           Предложить повышение уровня
         </button>
       </div>
+      </>)}
       <h4>Редакции действующих компетенций</h4>
       <div className="equipment-policy-versions">
         {skillHistory.map(x => (
@@ -222,10 +242,10 @@ export default function EquipmentPolicyPanel({
       </div>
       <h4>История согласования</h4>
       {proposals.length === 0 && <p>Заявок на изменение требований пока нет.</p>}
-      <label>Мотивировка решения (не менее 10 символов)
+      {rights.can_review && <label>Мотивировка решения (не менее 10 символов)
         <input value={reviewNote} minLength={10} maxLength={400}
           onChange={e => setReviewNote(e.target.value)} />
-      </label>
+      </label>}
       <div className="equipment-policy-list">
         {proposals.map(p => (
           <article className="equipment-policy-row" key={p.id}>
@@ -243,9 +263,9 @@ export default function EquipmentPolicyPanel({
             <p>Основание: {p.reason}</p>
             {p.review_note && <p>Решение: {p.review_note}</p>}
             {p.status === "pending" && p.proposed_by === actorId && (
-              <small>Для решения требуется другой администратор.</small>
+              <small>Для решения требуется другой уполномоченный согласующий.</small>
             )}
-            {p.status === "pending" && p.proposed_by !== actorId && (
+            {rights.can_review && p.status === "pending" && p.proposed_by !== actorId && (
               <div className="equipment-policy-review">
                 <button type="button" disabled={busy || !isReviewValid}
                   onClick={() => void mutate(

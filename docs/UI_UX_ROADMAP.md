@@ -239,3 +239,21 @@ are available, and old direct policy-write routes stay closed. Physical
 work authorization and certified safety functions remain external.
 See ADR-0019. Database downgrade would lose new safety constraints and
 must not be performed against operational data.
+
+
+### PR #24 — Exact-unit Equipment Policy Permission Matrix (in review)
+
+Adds three operation permissions (policy read/propose/review) as explicit
+admin-managed per-user, per-unit grants, separate from existing Admin,
+Manager and Viewer login roles. A non-admin needs BOTH visibility of the
+asset unit through existing organization scopes AND an exact-unit operation
+grant. Rights are rechecked on every request; revoked grants immediately
+block subsequent actions. A delegated engineer can propose and a delegated
+safety reviewer can independently decide, without global Admin privileges.
+Self-review remains prohibited even for accounts with both grants.
+
+Admin UI offers scoped permission matrix, unit-scope grant and revocation;
+the Equipment panel now renders permissions-driven maker, checker or
+read-only controls. Other HRMS modules and hardware safety gates are
+unchanged. This is only the first fine-grained RBAC vertical slice, not
+an unrestricted role-definition engine. See ADR-0020.

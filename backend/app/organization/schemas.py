@@ -1,5 +1,7 @@
 """Validated API contracts for configurable organization hierarchies."""
 
+from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -74,3 +76,20 @@ class AuditEventView(BaseModel):
     action: str
     subject_id: UUID
     details_json: str
+
+
+class PermissionGrantCreate(BaseModel):
+    user_id: UUID
+    unit_id: UUID
+    code: Literal[
+        "equipment.policy.read",
+        "equipment.policy.propose",
+        "equipment.policy.review",
+    ]
+
+
+class PermissionGrantView(PermissionGrantCreate):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    granted_by: UUID
+    created_at: datetime
