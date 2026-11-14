@@ -1327,10 +1327,10 @@ def test_asset_skill_write_rejects_bad_scale_roles_and_scope(
     assert client.post(endpoint, json=valid).status_code == 403
     assert client.post(
         endpoint, headers=auth(client, "wm-viewer"), json=valid,
-    ).status_code == 403
+    ).status_code == 404
     assert client.post(
         endpoint, headers=auth(client, "wm-manager"), json=valid,
-    ).status_code == 403
+    ).status_code == 404
     assert client.post(
         f"{EQUIPMENT}/assets/{asset['id']}/required-skills",
         headers=auth(client), json={
@@ -1906,7 +1906,7 @@ def test_governed_policy_is_inactive_before_independent_review_and_reject_preser
     ).status_code == 403
     assert client.post(
         review_route + "/approve", headers=auth(client, "wm-manager"), json=review,
-    ).status_code == 403
+    ).status_code == 404
     assert client.post(
         review_route + "/approve", json=review,
     ).status_code == 403
@@ -2022,12 +2022,12 @@ def test_governed_policy_invalid_payload_scope_and_stale_review(
         **body, "reason": "   ",
     }).status_code == 422
     assert client.post(route, headers=auth(client, "wm-manager"),
-                       json=body).status_code == 403
+                       json=body).status_code == 404
     assert client.post(route, json=body).status_code == 403
     row = client.post(route, headers=auth(client), json=body).json()
     assert row["status"] == "pending"
     auth(client, "wm-viewer")
-    assert client.get(route).status_code == 403
+    assert client.get(route).status_code == 404
     auth(client)
     # A foreign asset cannot be approached through this tenant's policy path.
     assert client.get(
@@ -2137,8 +2137,8 @@ def test_equipment_skill_versions_are_immutable_monotonic_and_enforced(
     ).status_code == 403
     assert client.post(
         url + "/approve", headers=auth(client, "wm-manager"),
-        json={"note": "Manager role cannot approve asset skill revisions"},
-    ).status_code == 403
+        json={"note": "Manager without asset scope cannot approve revisions"},
+    ).status_code == 404
     approved = approve_upgrade(client, asset, proposed)
     assert approved.status_code == 200, approved.text
     raised = approved.json()["required_skills"][0]
@@ -2251,9 +2251,9 @@ def test_skill_upgrade_multiple_versions_and_authorization(
     assert [x["min_ordinal"] for x in history] == [0, 1, 3]
     assert len({x["min_level_id"] for x in history}) == 3
     auth(client, "wm-viewer")
-    assert client.get(endpoint).status_code == 403
+    assert client.get(endpoint).status_code == 404
     auth(client, "wm-manager")
-    assert client.get(endpoint).status_code == 403
+    assert client.get(endpoint).status_code == 404
     auth(client)
     assert client.get(
         f"{EQUIPMENT}/assets/{s['foreign_person']}/skill-policy-revisions"
@@ -2318,7 +2318,7 @@ def test_permission_matrix_grant_revoke_and_exact_unit_scope(
     ).status_code == 404
     assert client.get(grant_url).status_code == 403
     assert client.post(
-        grant_url, headers=auth(client), json=payload,
+        grant_url, headers=auth(client, "wm-manager"), json=payload,
     ).status_code == 403
     auth(client)
     assert client.delete(
@@ -2382,13 +2382,13 @@ def test_scoped_engineer_can_propose_and_independent_reviewer_can_decide(
     ).json() == {
         "can_read": True, "can_propose": True, "can_review": False,
     }
-    proposed = client.post(endpoint, headers=auth(client), json=body)
+    proposed = client.post(endpoint, headers=auth(client, "wm-manager"), json=body)
     assert proposed.status_code == 201, proposed.text
     assert proposed.json()["status"] == "pending"
     assert proposed.json()["proposed_by"] == str(manager.id)
     assert client.post(
         endpoint + "/" + proposed.json()["id"] + "/approve",
-        headers=auth(client), json={"note": "Should never self-authorize"},
+        headers=auth(client, "wm-manager"), json={"note": "Should never self-authorize"},
     ).status_code == 403
     auth(client, "wm-viewer")
     assert client.get(
@@ -2397,12 +2397,12 @@ def test_scoped_engineer_can_propose_and_independent_reviewer_can_decide(
         "can_read": True, "can_propose": False, "can_review": True,
     }
     assert client.post(
-        endpoint, headers=auth(client), json=body,
+        endpoint, headers=auth(client, "wm-viewer"), json=body,
     ).status_code == 403
     assert client.get(endpoint).status_code == 200
     approved = client.post(
         endpoint + "/" + proposed.json()["id"] + "/approve",
-        headers=auth(client),
+        headers=auth(client, "wm-viewer"),
         json={"note": "Independent inspection by delegated safety reviewer"},
     )
     assert approved.status_code == 200, approved.text
@@ -2412,7 +2412,7 @@ def test_scoped_engineer_can_propose_and_independent_reviewer_can_decide(
     ).status_code == 200
     assert client.post(
         f"{EQUIPMENT}/assets/{asset['id']}/required-skills",
-        headers=auth(client), json={
+        headers=auth(client, "wm-viewer"), json={
             "skill_id": s["skill"], "min_level_id": s["level_high"],
         },
     ).status_code == 403
@@ -2457,7 +2457,7 @@ def test_scoped_reviewer_cannot_approve_own_proposal_and_revocation_is_immediate
         grants.append(response.json())
     endpoint = f"{EQUIPMENT}/assets/{asset['id']}/policy-proposals"
     auth(client, "wm-manager")
-    created = client.post(endpoint, headers=auth(client), json={
+    created = client.post(endpoint, headers=auth(client, "wm-manager"), json={
         "kind": "skill", "skill_id": s["skill"],
         "min_level_id": s["level_high"],
         "reason": "Synthetic maker checker separation of duties validation",
@@ -2465,7 +2465,7 @@ def test_scoped_reviewer_cannot_approve_own_proposal_and_revocation_is_immediate
     assert created.status_code == 201
     denied = client.post(
         endpoint + "/" + created.json()["id"] + "/approve",
-        headers=auth(client), json={
+        headers=auth(client, "wm-manager"), json={
             "note": "A reviewer cannot authorize their own pending proposal",
         },
     )
@@ -2483,7 +2483,7 @@ def test_scoped_reviewer_cannot_approve_own_proposal_and_revocation_is_immediate
     ).json()["can_review"] is False
     assert client.post(
         endpoint + "/" + created.json()["id"] + "/reject",
-        headers=auth(client), json={
+        headers=auth(client, "wm-manager"), json={
             "note": "Revoked review capability cannot approve or reject",
         },
     ).status_code == 403
