@@ -14,10 +14,12 @@ real FastAPI server and a **dedicated PostgreSQL database**.
 - Mutations: performed with normal authenticated REST API and correct CSRF
   headers; expected negative results assert real HTTP status codes
 - Artifacts: HTML and JUnit reports, failure-only screenshots, trace and video
-- GitHub Actions: dedicated E2E job following backend unit tests and frontend
+- GitHub Actions: dedicated E2E job running alongside backend tests and frontend
   build; uploads artifacts even on failure
 
-### Covered scenarios
+### Initial PR #13 scenarios
+
+Later suites cover the shared workspace, dashboard, configurator, equipment policies, downtime and delegated reviews. See the [current browser tests](../frontend/e2e/tests/).
 
 1. Guest sees navigation but no private organization/personnel data; successful
    UI login refreshes the session and right rail.
@@ -72,7 +74,7 @@ docker compose -f docker-compose.e2e.yml ps
 docker compose -f docker-compose.e2e.yml exec -e TWM_ADMIN_USERNAME=e2e_admin -e TWM_ADMIN_PASSWORD="$env:E2E_ADMIN_PASSWORD" backend python -m app.identity.bootstrap_admin
 
 cd frontend
-npm install
+npm ci
 npx playwright install chromium
 $env:E2E_BASE_URL = "http://127.0.0.1:5174"
 $env:E2E_ALLOW_SEED = "1"

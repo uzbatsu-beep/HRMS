@@ -46,13 +46,13 @@ the active domain workspace.
 - [ ] No changes to PostgreSQL schema or existing Work Management safety gates.
 
 CI TypeScript and Vite checks are not a browser acceptance substitute.
-Run this checklist with synthetic data before deciding to merge.
+Use this checklist for manual regression testing on synthetic data.
 
-## Recommended subsequent PRs
+## Merged UI milestones
 
-### PR #13 — Browser E2E + demonstration fixture
+### PR #13 — Browser E2E + demonstration fixture (merged)
 
-Introduce Playwright and a deterministic, synthetic demonstration fixture.
+The Playwright suite uses a deterministic, synthetic demonstration fixture.
 Test login, organization/personnel, skills, credentials, shifts,
 explainable work matching, crew assignment, late permit revocation, hold,
 and cancellation. Publish screenshots, trace files and CI artifacts on failure.
@@ -73,7 +73,7 @@ filters, full Person summary cards, cursor-based searches/pagination beyond
 current endpoint limits, subtree (vs. direct department) filters and advanced
 keyboard navigation. The hash-based routes continue to be sufficient.
 
-### PR #15 — Operational dashboard & analytics (implementation in review)
+### PR #15 — Operational dashboard & analytics (merged)
 
 Operational dashboard for all authenticated roles with organizational RBAC.
 The first version uses a fixed 30-calendar-day UTC trend window and 30-day
@@ -87,7 +87,7 @@ Acceptance: scoped cross-enterprise/unit reads, empty/zero cases, inactive
 resources, expiry boundaries, cancelled bookings, dashboard navigation, account
 switching and CI checks. Do not mark complete before test evidence.
 
-### PR #16 — Configurator and governed workflow (in review)
+### PR #16 — Configurator and governed workflow (merged)
 
 First governed vertical slice: enterprise-specific custom metadata for Person
 profiles (text, integer, boolean, controlled-choice dictionary). Draft versions
@@ -103,7 +103,7 @@ general custom attributes for additional entities, a catalog governance UI for
 existing domain dictionaries, per-field reporting, multi-enterprise delegation
 and revision comparison. These are *not* implemented in this slice.
 
-### PR #17 — Equipment, work permits and safety workflow (in review)
+### PR #17 — Equipment, work permits and safety workflow (merged)
 
 Equipment assets and append-only equipment-specific credential policies, an
 immutable asset-to-WorkOrder link (before staffing), and a versioned human
@@ -115,8 +115,8 @@ equipment active before work start, resume or successful safety revalidation.
 In-progress work is put on an HRMS hold if its permit is revoked, equipment is
 marked out of service, or stricter equipment credential policy is added.
 
-Remaining engineering work: certified PTW compliance, equipment-specific
-skills, tamper-resistant evidence uploads, periodic mandatory rechecks, PLC/
+Equipment-specific skills shipped in PR #18. Remaining gaps described in the PR #17 ADR include
+tamper-resistant evidence uploads, periodic mandatory rechecks, PLC/
 robot/machine interlock integration, LOTO verification and operator training.
 No legally effective PTW or physical machine protection is claimed.
 See `docs/adr/0013-equipment-permit-workflow.md`.
@@ -135,20 +135,12 @@ git pull --ff-only
 docker compose up --build -d
 ```
 
-If PR #12 has not been merged and you want a preview:
-
-```powershell
-git fetch origin feature/workspace-shell-navigation
-git switch --track origin/feature/workspace-shell-navigation
-docker compose up --build -d
-```
-
 Open `http://localhost:5173/#dashboard`.
 The backend is unchanged in PR #12. Use only synthetic personnel/credentials
 while validating. The production-like operational workflow does not itself
 authorize hazardous work.
 
-### PR #18 — Equipment Skill Gates & Software Readiness (in review)
+### PR #18 — Equipment Skill Gates & Software Readiness (merged)
 
 Append-only machine-specific skill thresholds are enforced in addition to each
 work order's existing approved skill requirements and safety credentials. The
@@ -165,7 +157,7 @@ operational asset inspection evidence, immutable site PTW certificates and
 system-level safety integration with certified external processes.
 
 
-### PR #19 — Equipment Planned Downtime & Scheduling Gates (in review)
+### PR #19 — Equipment Planned Downtime & Scheduling Gates (merged)
 
 A tenant-scoped equipment maintenance calendar records bounded non-overlapping
 windows with auditable cancellation history. A newly scheduled overlap with an
@@ -177,7 +169,7 @@ automatically resume work. An operator must explicitly revalidate. Refer to
 docs/adr/0015-equipment-downtime.md.
 
 
-### PR #20 — On-demand Redacted Crew Readiness (in review)
+### PR #20 — On-demand Redacted Crew Readiness (merged)
 
 The existing equipment overview intentionally checks only current asset/
 permit/downtime software conditions. Dispatchers can now request a separate,
@@ -192,7 +184,7 @@ Next backlog: independent policy approval/version management, richer
 role-permission matrix, formal CMMS integration and operator training.
 
 
-### PR #21 — Equipment Audit Explorer and keyset pagination (in review)
+### PR #21 — Equipment Audit Explorer and keyset pagination (merged)
 
 Admin-only historical event explorer for assets, equipment policies, permits
 and downtime. New bounded endpoint supports exact action, actor/subject UUID
@@ -207,7 +199,7 @@ Follow-up: certified retention/log integrity, domain policy governance,
 permissions matrix, company-scoped admin delegation.
 
 
-### PR #22 — Independent Equipment Policy Governance (in review)
+### PR #22 — Independent Equipment Policy Governance (merged)
 
 New equipment-specific skill/credential requirements require a submitted,
 pending policy proposal and approval or rejection by **a different admin**.
@@ -224,7 +216,7 @@ certified PTW, paper signatures and PLC safety are still outside scope.
 See docs/adr/0018-equipment-policy-governance.md.
 
 
-### PR #23 — Immutable Equipment Skill Policy Versions (in review)
+### PR #23 — Immutable Equipment Skill Policy Versions (merged)
 
 Skill threshold increases now follow v1 baseline -> v2/v3 immutable
 approved revisions, with optimistic expected_version and second-admin
@@ -241,7 +233,7 @@ See ADR-0019. Database downgrade would lose new safety constraints and
 must not be performed against operational data.
 
 
-### PR #24 — Exact-unit Equipment Policy Permission Matrix (in review)
+### PR #24 — Exact-unit Equipment Policy Permission Matrix (merged)
 
 Adds three operation permissions (policy read/propose/review) as explicit
 admin-managed per-user, per-unit grants, separate from existing Admin,
@@ -259,7 +251,7 @@ unchanged. This is only the first fine-grained RBAC vertical slice, not
 an unrestricted role-definition engine. See ADR-0020.
 
 
-### PR #25 — Scoped Competence and Credential Review (in review)
+### PR #25 — Scoped Competence and Credential Review (merged)
 
 The existing per-unit operation grant matrix now also covers independently
 approving/rejecting competency assessments and verifying/rejecting credential

@@ -2,8 +2,8 @@
 FROM node:22-alpine
 
 WORKDIR /app
-COPY package.json ./
-RUN npm install
+COPY package.json package-lock.json ./
+RUN npm ci
 COPY index.html ./
 COPY vite.config.ts ./
 COPY tsconfig.json ./
