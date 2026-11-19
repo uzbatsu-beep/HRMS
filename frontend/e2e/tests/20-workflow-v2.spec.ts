@@ -17,8 +17,14 @@ test("Configurator v2 governs service intake and independent decisions", async (
   await editor.locator("summary").click();
   await editor.getByLabel("Код шаблона").fill(code);
   await editor.getByLabel("Название шаблона").fill(label);
+  await editor.getByLabel("Название поля").fill("Техническое описание");
   await editor.getByRole("button", { name: "Сохранить черновик маршрута" }).click();
   await expect(v2).toContainText("Версия сохранена");
+  await page.reload();
+  await page.locator(".workspace-rail").getByLabel("Предприятие")
+    .selectOption(seed.enterprise.id);
+  await editor.locator("summary").click();
+  await expect(editor.getByLabel("Название поля")).toHaveValue("Техническое описание");
   await editor.getByRole("button", { name: "Проверить маршрут" }).click();
   await expect(v2).toContainText("Переход версии выполнен");
 
@@ -57,7 +63,7 @@ test("Configurator v2 governs service intake and independent decisions", async (
   await v2.getByLabel("Вид заявки").selectOption(code);
   await v2.getByLabel("Подразделение").selectOption(seed.units.automation);
   await v2.getByLabel("Тема").fill(intakeTitle);
-  await v2.getByLabel("Описание обращения").fill(
+  await v2.getByLabel("Техническое описание").fill(
     "Synthetic informational follow-up only, not a physical work permit",
   );
   await v2.getByRole("button", { name: "Создать заявку" }).click();
