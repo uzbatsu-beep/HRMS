@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { WorkCapabilities } from "./WorkPermissions";
+import { useCandidatePages } from "./useCandidatePages";
 
 type Priority = "routine" | "normal" | "urgent" | "critical";
 type Status = "open" | "assigned" | "in_progress" | "on_hold" | "completed" | "cancelled";
@@ -81,7 +82,6 @@ export default function WorkExecutionPanel({
   order: Order; csrfToken: string | undefined;
   capabilities: WorkCapabilities | null; onChanged: () => void;
 }) {
-  const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [checked, setChecked] = useState<SafetyResult | null>(null);
   const [priority, setPriority] = useState<Priority>(order.priority);
   const [priorityReason, setPriorityReason] = useState("");
@@ -95,29 +95,24 @@ export default function WorkExecutionPanel({
   const assigned = order.status === "assigned";
   const running = order.status === "in_progress";
   const onHold = order.status === "on_hold";
+  const pages = useCandidatePages(
+    order.id, assigned,
+    [order.status, order.priority, order.crew.length, order.assignment?.person_id].join(":"),
+  );
+  const candidates = pages.items;
   const can = (name: keyof WorkCapabilities) => Boolean(capabilities?.[name]);
 
   useEffect(() => {
-    // Preserve the just-returned safety report when the parent reloads after
-    // an on_hold transition. The panel is keyed by order ID, so selecting a
-    // different work order already resets this state.
     setPriority(order.priority);
-    setCandidates([]); setSelectedPerson("");
-    if (!assigned) return;
-    let active = true;
-    api<Candidate[]>(`${API}/orders/${order.id}/candidates`)
-      .then((rows) => {
-        if (active) {
-          setCandidates(rows);
-          setSelectedPerson(rows.find((row) => row.eligible)?.person_id ?? "");
-        }
-      })
-      .catch((reason: unknown) => {
-        if (active) setError(reason instanceof Error ? reason.message : "Ошибка подбора");
-      });
-    return () => { active = false; };
-  }, [order.id, order.status, order.priority, order.crew.length,
-    order.assignment?.person_id]);
+    setSelectedPerson("");
+  }, [order.id, order.priority, order.crew.length, order.assignment?.person_id]);
+
+  useEffect(() => {
+    setSelectedPerson((old) =>
+      candidates.some((candidate) => candidate.person_id === old && candidate.eligible)
+        ? old : (candidates.find((candidate) => candidate.eligible)?.person_id ?? "")
+    );
+  }, [candidates]);
 
   async function action(path: string, payload?: unknown, message?: string) {
     const right: keyof WorkCapabilities = path === "priority" ? "priority"
@@ -230,6 +225,11 @@ export default function WorkExecutionPanel({
         <div className="wm-execution-detail">
           <h4>Сформировать бригаду / заменить ответственного</h4>
           <div className="wm-crew-editor">
+            <label>Поиск специалиста для бригады
+              <input type="search" maxLength={100} value={pages.search}
+                placeholder="Фамилия или табельный код"
+                onChange={(event) => pages.setSearch(event.target.value)} />
+            </label>
             <label>Свободный кандидат
               <select value={selectedPerson} onChange={(e) => setSelectedPerson(e.target.value)}>
                 <option value="">Выберите кандидата</option>
@@ -240,6 +240,20 @@ export default function WorkExecutionPanel({
                 ))}
               </select>
             </label>
+            {pages.busy && <p role="status" className="wm-hint">Загрузка кандидатов…</p>}
+            {pages.error && (
+              <div role="alert" className="wm-error">
+                {pages.error}
+                <button type="button" className="wm-button secondary"
+                  onClick={pages.retry}>Повторить запрос</button>
+              </div>
+            )}
+            {pages.hasMore && (
+              <button type="button" className="wm-button secondary"
+                disabled={pages.busy} onClick={() => void pages.loadMore()}>
+                Показать ещё кандидатов
+              </button>
+            )}
             <label>Роль
               <select value={role} onChange={(e) => setRole(e.target.value)}>
                 <option value="specialist">Специалист</option>

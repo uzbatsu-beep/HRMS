@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useWorkspace } from "./WorkspaceContext";
 import WorkExecutionPanel from "./WorkExecutionPanel";
 import type { WorkCapabilities } from "./WorkPermissions";
+import { useCandidatePages } from "./useCandidatePages";
 import WorkEquipmentPermitPanel from "./WorkEquipmentPermitPanel";
 
 type User = { id: string; username: string; role: "admin" | "manager" | "viewer" };
@@ -112,7 +113,6 @@ export default function WorkPanel() {
   const [requirements, setRequirements] = useState<Requirement[]>([]);
   const [orders, setOrders] = useState<Work[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState("");
-  const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -133,6 +133,10 @@ export default function WorkPanel() {
 
   const dispatcher = session?.user.role === "admin" || session?.user.role === "manager";
   const selectedOrder = orders.find((work) => work.id === selectedOrderId);
+  const candidatePages = useCandidatePages(
+    selectedOrderId, Boolean(session && selectedOrder?.status === "open"), revision,
+  );
+  const candidates = candidatePages.items;
   const unitKey = [session?.user.id, enterpriseId, unitId].join(":");
   const orderKey = [session?.user.id, selectedOrderId].join(":");
   const canCreate = unitCaps?.key === unitKey && unitCaps.data.create;
@@ -172,7 +176,7 @@ export default function WorkPanel() {
 
   useEffect(() => {
     if (!session) {
-      setEnterprises([]); setOrders([]); setCandidates([]);
+      setEnterprises([]); setOrders([]);
       return;
     }
     let active = true;
@@ -227,21 +231,6 @@ export default function WorkPanel() {
     return () => { active = false; };
   }, [session?.user.id, enterpriseId, revision]);
 
-  useEffect(() => {
-    if (!selectedOrderId || !session || selectedOrder?.status !== "open") {
-      setCandidates([]); return;
-    }
-    let active = true;
-    api<Candidate[]>(`${base}/orders/${selectedOrderId}/candidates`)
-      .then((rows) => { if (active) setCandidates(rows); })
-      .catch((cause: unknown) => {
-        if (active) {
-          setCandidates([]);
-          setError(cause instanceof Error ? cause.message : "Ошибка подбора");
-        }
-      });
-    return () => { active = false; };
-  }, [selectedOrderId, selectedOrder?.status, session?.user.id, revision]);
 
 
   useEffect(() => {
@@ -560,7 +549,12 @@ export default function WorkPanel() {
                 Кандидаты выводятся из подразделения задания. Принятие решения и
                 бронирование происходит повторно внутри серверной транзакции.
               </p>
-              <div className="wm-candidates">
+              <label className="wm-candidate-search">Поиск по ФИО или табельному коду
+                <input type="search" maxLength={100} value={candidatePages.search}
+                  onChange={(event) => candidatePages.setSearch(event.target.value)}
+                  placeholder="Фамилия или код сотрудника" />
+              </label>
+              <div className="wm-candidates" aria-busy={candidatePages.busy}>
                 {candidates.map((candidate) => (
                   <article key={candidate.person_id} className="wm-candidate">
                     <div className="wm-detail-head">
@@ -592,8 +586,26 @@ export default function WorkPanel() {
                     )}
                   </article>
                 ))}
-                {candidates.length === 0 &&
-                  <p className="wm-empty">Для этого задания кандидатов в подразделении не найдено.</p>}
+                {candidatePages.busy && candidates.length === 0 && (
+                  <p role="status" className="wm-empty">Загрузка кандидатов…</p>
+                )}
+                {candidatePages.error && (
+                  <div className="wm-error" role="alert">
+                    {candidatePages.error}
+                    <button className="wm-button secondary" type="button"
+                      onClick={candidatePages.retry}>Повторить запрос</button>
+                  </div>
+                )}
+                {!candidatePages.busy && !candidatePages.error && candidates.length === 0 && (
+                  <p className="wm-empty">Кандидатов по выбранным условиям не найдено.</p>
+                )}
+                {candidatePages.hasMore && (
+                  <button type="button" className="wm-button secondary"
+                    disabled={candidatePages.busy || busy}
+                    onClick={() => void candidatePages.loadMore()}>
+                    {candidatePages.busy ? "Загрузка…" : "Показать ещё кандидатов"}
+                  </button>
+                )}
               </div>
             </div>
           )}

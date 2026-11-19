@@ -98,10 +98,10 @@ def interval(start_hour: int = 9, end_hour: int = 10) -> tuple[str, str]:
     )
 
 
-def seed(client: TestClient) -> dict[str, str]:
+def seed(client: TestClient, enterprise_code: str = "workplant") -> dict[str, str]:
     enterprise = post(
         client, "/api/v1/org/enterprises",
-        {"code": "workplant", "name": "Technical works plant"},
+        {"code": enterprise_code, "name": "Technical works plant"},
     )["id"]
     unit_type = post(
         client, f"/api/v1/org/enterprises/{enterprise}/types",
@@ -2881,3 +2881,263 @@ def test_manager_legacy_dispatch_rights_keep_scope_and_csrf(
         f"{BASE}/enterprises/{s['enterprise']}/orders",
         json=work_payload(s, "missing-csrf-30"),
     ).status_code == 403
+
+
+# PR #31 — every scoped candidate is reachable beyond the previous first 100.
+
+def test_keyset_candidates_reach_qualified_worker_beyond_first_hundred(
+    scenario: tuple[TestClient, Session],
+) -> None:
+    client, db = scenario
+    s = seed(client)
+    work = create_work(client, s, "candidate-over-100")
+    from app.personnel.models import Person
+
+    later_person = None
+    later_resource = None
+    same_name_ids: list[str] = []
+    # Surnames intentionally come AFTER the two originally seeded entries.
+    # All records are real, queryable ORM rows, not mocked API responses.
+    for index in range(125):
+        person = Person(
+            enterprise_id=UUID(s["enterprise"]), employee_code=f"PAGE-{index:04}",
+            first_name="Candidate",
+            last_name="Zed-0017" if index == 18 else f"Zed-{index:04}",
+        )
+        db.add(person)
+        db.flush()
+        if index in {17, 18}:
+            same_name_ids.append(str(person.id))
+        resource = WorkforceResource(
+            enterprise_id=UUID(s["enterprise"]), person_id=person.id,
+        )
+        db.add(resource)
+        db.flush()
+        db.add(EmploymentAssignment(
+            enterprise_id=UUID(s["enterprise"]), resource_id=resource.id,
+            unit_id=UUID(s["unit"]), effective_from=date(2020, 1, 1),
+        ))
+        if index == 124:
+            later_person, later_resource = str(person.id), str(resource.id)
+    db.commit()
+    assert later_person is not None and later_resource is not None
+
+    target = {**s, "person": later_person}
+    verified_skills(client, target)
+    verified_permit(client, target)
+    post(client, f"/api/v1/availability/resources/{later_resource}/shifts", {
+        "weekday": 0, "local_start": "08:00:00", "local_end": "18:00:00",
+        "time_zone": "UTC", "valid_from": "2020-01-01",
+    })
+    legacy = client.get(f"{BASE}/orders/{work['id']}/candidates")
+    assert legacy.status_code == 200
+    assert later_person not in {row["person_id"] for row in legacy.json()}
+
+    all_items = []
+    cursor = None
+    seen_cursors = set()
+    for _ in range(8):
+        params = {"limit": 20}
+        if cursor is not None:
+            params["after"] = cursor
+        response = client.get(
+            f"{BASE}/orders/{work['id']}/candidates-page", params=params,
+        )
+        assert response.status_code == 200, response.text
+        page = response.json()
+        assert 0 < len(page["items"]) <= 20
+        all_items.extend(page["items"])
+        if not page["has_more"]:
+            assert page["next_cursor"] is None
+            break
+        cursor = page["next_cursor"]
+        assert cursor not in seen_cursors
+        seen_cursors.add(cursor)
+    else:
+        pytest.fail("Keyset page traversal did not terminate")
+    ids = [item["person_id"] for item in all_items]
+    assert len(ids) == len(set(ids)) == 127
+    assert later_person in ids
+    # Identical surname/first-name values straddling a page boundary are
+    # ordered deterministically by the UUID tie-breaker, with no duplicates.
+    assert set(same_name_ids) <= set(ids)
+    target_result = next(item for item in all_items if item["person_id"] == later_person)
+    assert target_result["eligible"] is True
+    assert len(all_items) > 100
+    # The candidate reachable in page 7 can still be assigned atomically.
+    assert assign(client, work, later_person).status_code == 200
+
+
+def test_candidate_page_search_literal_limits_and_cursor_isolation(
+    scenario: tuple[TestClient, Session],
+) -> None:
+    client, db = scenario
+    s = seed(client)
+    work = create_work(client, s, "candidate-page-filter")
+    url = f"{BASE}/orders/{work['id']}/candidates-page"
+    assert client.get(url, params={"limit": 0}).status_code == 422
+    assert client.get(url, params={"limit": 101}).status_code == 422
+    assert client.get(url, params={"search": "x" * 101}).status_code == 422
+    regular = client.get(url, params={"limit": 1}).json()
+    assert len(regular["items"]) == 1
+    assert regular["has_more"] is True
+    assert regular["next_cursor"] == regular["items"][-1]["person_id"]
+    page2 = client.get(url, params={
+        "limit": 1, "after": regular["next_cursor"],
+    }).json()
+    assert page2["items"][0]["person_id"] != regular["items"][0]["person_id"]
+    # A cursor anchored in one result must not be reused with a narrower search.
+    assert client.get(url, params={
+        "after": regular["next_cursor"], "search": "NoSuchName",
+    }).status_code == 422
+    assert client.get(url, params={
+        "after": s["foreign_person"],
+    }).status_code == 422
+    literal = client.get(url, params={"search": "%"}).json()
+    assert literal["items"] == []
+    code = client.get(url, params={"search": "w001"}).json()
+    assert [r["person_id"] for r in code["items"]] == [s["person"]]
+
+    # Scoped manager sees only current people, even if a future unit transfer
+    # makes someone eligible to serve the planned work's department.
+    auth(client)
+    manager = db.scalar(select(UserAccount).where(UserAccount.username == "wm-manager"))
+    assert manager is not None
+    post(client, "/api/v1/org/scopes", {
+        "user_id": str(manager.id), "unit_id": s["unit"],
+        "include_descendants": False,
+    })
+    auth(client, "wm-manager")
+    page = client.get(url, params={"limit": 5})
+    assert page.status_code == 200
+    assert s["foreign_person"] not in {r["person_id"] for r in page.json()["items"]}
+    foreign_resource = db.scalar(select(WorkforceResource).where(
+        WorkforceResource.person_id == UUID(s["foreign_person"]),
+    ))
+    assert foreign_resource is not None
+    # Deliberately corrupt historical overlap (not permitted via the API).
+    # The earlier in-scope assignment must NOT override the latest primary one.
+    db.add(EmploymentAssignment(
+        enterprise_id=UUID(s["enterprise"]), resource_id=foreign_resource.id,
+        unit_id=UUID(s["unit"]), effective_from=date(2019, 1, 1),
+    ))
+    db.commit()
+    after_overlap = client.get(url, params={"limit": 20})
+    assert after_overlap.status_code == 200
+    assert s["foreign_person"] not in {
+        r["person_id"] for r in after_overlap.json()["items"]
+    }
+    foreign = client.get(
+        f"{BASE}/orders/{work['id']}/candidates/{s['foreign_person']}"
+    )
+    assert foreign.status_code == 404
+    auth(client, "wm-viewer")
+    assert client.get(url).status_code == 404
+
+
+def test_postgresql_parallel_assignment_has_no_double_bookings() -> None:
+    """Real PostgreSQL READ COMMITTED and separate sessions / HTTP clients.
+
+    This intentionally cannot run on SQLite's in-memory StaticPool. The CI
+    service is disposable; local runs must explicitly opt in with an isolated DB.
+    """
+    import os
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+    from uuid import uuid4
+
+    from app.database import SessionLocal, engine
+
+    if os.getenv("TWM_PG_CONCURRENCY_TESTS") != "1":
+        pytest.skip("Explicit PostgreSQL concurrency opt-in required")
+    if engine.dialect.name != "postgresql" or os.getenv("TWM_APP_ENV") != "test":
+        pytest.skip("Only isolated PostgreSQL test app environment is supported")
+
+    with SessionLocal() as setup:
+        for name, role in (
+            ("wm-admin", "admin"), ("wm-reviewer", "admin"),
+            ("wm-manager", "manager"), ("wm-viewer", "viewer"),
+        ):
+            if setup.scalar(select(UserAccount).where(UserAccount.username == name)):
+                continue
+            setup.add(UserAccount(
+                username=name, role=role, is_active=True,
+                password_hash=hash_password(PASSWORD),
+            ))
+        setup.commit()
+
+    def compete(order_id: str, person_id: str) -> list[int]:
+        barrier = Barrier(2)
+
+        def attempt() -> int:
+            # Each thread owns a separate authenticated HTTP client, cookie jar
+            # and SQLAlchemy request session. No shared SQLite connections.
+            with TestClient(app) as parallel_client:
+                headers = auth(parallel_client)
+                barrier.wait(timeout=20)
+                response = parallel_client.post(
+                    f"{BASE}/orders/{order_id}/assign",
+                    headers=headers, json={"person_id": person_id},
+                )
+                return response.status_code
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(attempt) for _ in range(2)]
+            return [f.result(timeout=60) for f in futures]
+
+    def compete_two_orders(first: str, second: str, person_id: str) -> list[int]:
+        barrier = Barrier(2)
+
+        def attempt(order_id: str) -> int:
+            with TestClient(app) as parallel_client:
+                headers = auth(parallel_client)
+                barrier.wait(timeout=20)
+                response = parallel_client.post(
+                    f"{BASE}/orders/{order_id}/assign",
+                    headers=headers, json={"person_id": person_id},
+                )
+                return response.status_code
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(attempt, order_id) for order_id in (first, second)]
+            return [f.result(timeout=60) for f in futures]
+
+    with TestClient(app) as client:
+        s = seed(client, enterprise_code="pg-" + uuid4().hex[:14])
+        verified_skills(client, s)
+        verified_permit(client, s)
+        first = create_work(client, s, "pg-same-work-order")
+        assert sorted(compete(first["id"], s["person"])) == [200, 409]
+
+        # A second pair of overlapping orders competes for a different worker
+        # so the first successful reservation does not affect this race.
+        second_person = {**s, "person": s["other_person"]}
+        verified_skills(client, second_person)
+        verified_permit(client, second_person)
+        a = create_work(client, s, "pg-overlap-one")
+        b = create_work(client, s, "pg-overlap-two")
+        assert sorted(compete_two_orders(
+            a["id"], b["id"], s["other_person"],
+        )) == [200, 409]
+
+        with SessionLocal() as verify:
+            for person in (s["person"], s["other_person"]):
+                resource = verify.scalar(select(WorkforceResource).where(
+                    WorkforceResource.person_id == UUID(person),
+                ))
+                assert resource is not None
+                active = verify.scalars(select(WorkReservation).where(
+                    WorkReservation.enterprise_id == UUID(s["enterprise"]),
+                    WorkReservation.resource_id == resource.id,
+                    WorkReservation.cancelled_at.is_(None),
+                )).all()
+                assert len(active) == 1
+            assigned = verify.scalars(select(WorkOrder).where(
+                WorkOrder.enterprise_id == UUID(s["enterprise"]),
+                WorkOrder.status == "assigned",
+            )).all()
+            assert len(assigned) == 2
+            linked = verify.scalars(select(WorkOrderAssignment).where(
+                WorkOrderAssignment.enterprise_id == UUID(s["enterprise"]),
+            )).all()
+            assert len(linked) == 2
