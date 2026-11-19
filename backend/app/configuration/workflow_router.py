@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.configuration.router import (
-    audit, commit, enterprise_or_404, lock_enterprise, validate_value,
+    audit, commit, enterprise_or_404, lock_enterprise,
 )
 from app.configuration.workflow_models import (
     WorkflowCaseEvent, WorkflowDefinitionVersion, WorkflowServiceCase,
