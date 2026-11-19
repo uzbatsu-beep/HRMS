@@ -8,7 +8,7 @@ from datetime import date
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import and_, exists, func, or_, select
+from sqlalchemy import and_, exists, or_, select
 from sqlalchemy.orm import Session
 
 from app.availability.service import as_utc
