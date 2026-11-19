@@ -14,7 +14,8 @@ from app.database import get_db
 from app.identity.models import UserAccount
 from app.identity.security import get_current_user, require_admin, require_csrf
 from app.organization.access import allowed_unit_ids
-from app.organization.models import Enterprise, OrganizationUnit
+from app.organization.models import Enterprise, OrganizationUnit, UserUnitPermission
+from app.organization.permissions import can_work, work_capabilities
 from app.personnel.models import EmploymentAssignment, Person, WorkforceResource
 from app.personnel.service import require_visible_person, visible_person
 from app.work import execution, service as work_service
@@ -42,6 +43,29 @@ def require_dispatcher(user: UserAccount) -> None:
         raise HTTPException(status_code=403, detail="Dispatch role required")
 
 
+def require_work_actor(db: Session, user: UserAccount, code: str) -> None:
+    """An early uniform 403 when no role or grant can perform this mutation."""
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="Work operation permission required")
+    if user.role in {"admin", "manager"}:
+        return
+    present = db.scalar(select(UserUnitPermission.id).where(
+        UserUnitPermission.user_id == user.id,
+        UserUnitPermission.code == code,
+    ))
+    if present is None:
+        raise HTTPException(status_code=403, detail="Work operation permission required")
+
+
+def require_work_unit(
+    db: Session, user: UserAccount, unit: OrganizationUnit | None, code: str,
+) -> None:
+    if unit is None:
+        raise HTTPException(status_code=404, detail="Work order not found")
+    if not can_work(db, user, unit, code):
+        raise HTTPException(status_code=403, detail="Work operation permission required")
+
+
 @router.post(
     "/enterprises/{enterprise_id}/orders",
     response_model=WorkView, status_code=status.HTTP_201_CREATED,
@@ -52,7 +76,7 @@ def create_order(
     user: UserAccount = Depends(get_current_user),  # noqa: B008
     db: Session = Depends(get_db),  # noqa: B008
 ) -> WorkView:
-    require_dispatcher(user)
+    require_work_actor(db, user, "work.order.create")
     check_range(payload.starts_at, payload.ends_at, max_days=1)
     if db.get(Enterprise, enterprise_id) is None:
         raise HTTPException(status_code=404, detail="Enterprise not found")
@@ -64,6 +88,7 @@ def create_order(
         db, user, enterprise_id
     ):
         raise HTTPException(status_code=404, detail="Organizational unit not found")
+    require_work_unit(db, user, unit, "work.order.create")
     validated: list[tuple[Skill, SkillScaleLevel]] = []
     for entry in payload.required_skills:
         skill = db.get(Skill, entry.skill_id)
@@ -130,6 +155,37 @@ def get_order(
     return work_service.view_work(db, read_order(db, user, order_id))
 
 
+
+@router.get(
+    "/enterprises/{enterprise_id}/units/{unit_id}/capabilities",
+    response_model=dict[str, bool],
+)
+def get_work_unit_capabilities(
+    enterprise_id: UUID, unit_id: UUID,
+    user: UserAccount = Depends(get_current_user),  # noqa: B008
+    db: Session = Depends(get_db),  # noqa: B008
+) -> dict[str, bool]:
+    unit = db.get(OrganizationUnit, unit_id)
+    if unit is None or unit.enterprise_id != enterprise_id:
+        raise HTTPException(status_code=404, detail="Organizational unit not found")
+    if user.role != "admin" and unit.id not in allowed_unit_ids(db, user, enterprise_id):
+        raise HTTPException(status_code=404, detail="Organizational unit not found")
+    return work_capabilities(db, user, unit)
+
+
+@router.get("/orders/{order_id}/capabilities", response_model=dict[str, bool])
+def get_work_order_capabilities(
+    order_id: UUID,
+    user: UserAccount = Depends(get_current_user),  # noqa: B008
+    db: Session = Depends(get_db),  # noqa: B008
+) -> dict[str, bool]:
+    order = read_order(db, user, order_id)
+    unit = db.get(OrganizationUnit, order.unit_id)
+    if unit is None:
+        raise HTTPException(status_code=404, detail="Work order not found")
+    return work_capabilities(db, user, unit)
+
+
 @router.get("/orders/{order_id}/candidates", response_model=list[CandidateView])
 def list_candidates(
     order_id: UUID,
@@ -191,7 +247,7 @@ def assign_order(
     user: UserAccount = Depends(get_current_user),  # noqa: B008
     db: Session = Depends(get_db),  # noqa: B008
 ) -> WorkView:
-    require_dispatcher(user)
+    require_work_actor(db, user, "work.order.assign")
     order = read_order(db, user, order_id)
     person = db.get(Person, payload.person_id)
     if person is None or person.enterprise_id != order.enterprise_id:
@@ -203,6 +259,7 @@ def assign_order(
         if order.unit_id not in allowed_unit_ids(db, user, order.enterprise_id):
             raise HTTPException(status_code=404, detail="Work order not found")
         require_visible_person(db, user, person)
+    require_work_unit(db, user, db.get(OrganizationUnit, order.unit_id), "work.order.assign")
     if order.status != "open":
         raise HTTPException(status_code=409, detail="Work order is not open")
     if as_utc(order.ends_at) <= work_service.utcnow():
@@ -250,7 +307,7 @@ def start_order(
     user: UserAccount = Depends(get_current_user),  # noqa: B008
     db: Session = Depends(get_db),  # noqa: B008
 ) -> WorkView:
-    require_dispatcher(user)
+    require_work_actor(db, user, "work.order.start")
     order = read_order(db, user, order_id)
     work_service.lock_enterprise(db, order.enterprise_id)
     db.refresh(order, with_for_update=True)
@@ -258,6 +315,7 @@ def start_order(
         db, user, order.enterprise_id
     ):
         raise HTTPException(status_code=404, detail="Work order not found")
+    require_work_unit(db, user, db.get(OrganizationUnit, order.unit_id), "work.order.start")
     if order.status != "assigned":
         raise HTTPException(status_code=409, detail="Work must be assigned before starting")
     now = as_utc(work_service.utcnow())
@@ -321,7 +379,7 @@ def complete_order(
     user: UserAccount = Depends(get_current_user),  # noqa: B008
     db: Session = Depends(get_db),  # noqa: B008
 ) -> WorkView:
-    require_dispatcher(user)
+    require_work_actor(db, user, "work.order.complete")
     order = read_order(db, user, order_id)
     work_service.lock_enterprise(db, order.enterprise_id)
     db.refresh(order, with_for_update=True)
@@ -329,6 +387,7 @@ def complete_order(
         db, user, order.enterprise_id
     ):
         raise HTTPException(status_code=404, detail="Work order not found")
+    require_work_unit(db, user, db.get(OrganizationUnit, order.unit_id), "work.order.complete")
     if order.status != "in_progress":
         raise HTTPException(status_code=409, detail="Only active work can be completed")
     full_crew = execution.team_safety_check(db, order)
@@ -361,7 +420,7 @@ def cancel_order(
     user: UserAccount = Depends(get_current_user),  # noqa: B008
     db: Session = Depends(get_db),  # noqa: B008
 ) -> WorkView:
-    require_dispatcher(user)
+    require_work_actor(db, user, "work.order.cancel")
     order = read_order(db, user, order_id)
     work_service.lock_enterprise(db, order.enterprise_id)
     db.refresh(order, with_for_update=True)
@@ -369,6 +428,7 @@ def cancel_order(
         db, user, order.enterprise_id
     ):
         raise HTTPException(status_code=404, detail="Work order not found")
+    require_work_unit(db, user, db.get(OrganizationUnit, order.unit_id), "work.order.cancel")
     if order.status in {"completed", "cancelled"}:
         raise HTTPException(status_code=409, detail="Work order is already terminal")
     assignment = db.scalar(select(WorkOrderAssignment).where(
