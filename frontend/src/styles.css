@@ -1139,3 +1139,34 @@ h2 { margin: 6px 0 0; font-size: 18px; letter-spacing: -.025em; }
     animation-duration: 0.01ms !important;
   }
 }
+
+
+/* PR #32: service intake form/state/route designer — isolated from v1 selectors. */
+.config-workflow-v2 {
+  display: grid; gap: 17px; border-top: 1px solid var(--line);
+  margin-top: 12px; padding-top: 20px;
+}
+.config-workflow-v2 h4 { font-size: 13px; margin: 13px 0 7px; }
+.config-workflow-v2 .config-form {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px;
+}
+.config-workflow-v2 .config-form > h4,
+.config-workflow-v2 .config-form > .config-v2-field {
+  grid-column: 1 / -1;
+}
+.config-v2-field {
+  border: 1px solid var(--line); border-radius: 8px; padding: 14px;
+  margin: 12px 0; display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px; align-items: end;
+}
+.config-v2-field legend { font-weight: 700; font-size: 11px; }
+.config-v2-field .config-checkbox { flex-direction: row; align-items: center; }
+.config-v2-field .config-checkbox input { width: 16px; height: 16px; }
+.config-workflow-v2 details.config-workflow > summary {
+  cursor: pointer; font-weight: 700; font-size: 13px;
+}
+.config-workflow-v2 .config-workflow { min-width: 0; justify-items: stretch; }
+@media (max-width: 780px) {
+  .config-v2-field, .config-workflow-v2 .config-form { grid-template-columns: 1fr; }
+}

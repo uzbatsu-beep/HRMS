@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useWorkspace } from "./WorkspaceContext";
+import WorkflowConfiguratorV2 from "./WorkflowConfiguratorV2";
 
 export type CustomField = {
   code: string; label: string;
@@ -328,6 +329,7 @@ export default function ConfiguratorPanel() {
               )}
             </>
           )}
+          <WorkflowConfiguratorV2 />
           <p className="workspace-warning">
             Конфигурации предназначены только для разработки на синтетических данных.
             Управляемые поля не подтверждают квалификации и допуски.

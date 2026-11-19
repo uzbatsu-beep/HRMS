@@ -20,6 +20,7 @@
 | FR-12 | Delegated exact-unit read/propose/review политики и review персонала | I | P1 | [Permissions](../backend/app/organization/permissions.py), [ADR-0021](adr/0021-personnel-review-permissions.md) |
 | FR-13 | Dashboard 30 дней с RBAC и документированными метриками | I | P1 | [Analytics](../backend/app/analytics/router.py), [ADR-0011](adr/0011-operational-analytics.md) |
 | FR-14 | Дополнительные поля Person: validation → independent approval → publish | I | P1 | [Configuration](../backend/app/configuration/), [test_configuration](../backend/tests/test_configuration.py) |
+| FR-15 | Configurator v2: ограниченные формы, состояния и независимые маршруты заявок технической службы | PR #32 (Draft) | P1 | [ADR-0025](adr/0025-configurator-v2-service-intake.md), [Workflow API](../backend/app/configuration/workflow_router.py), [tests](../backend/tests/test_configuration.py) |
 | FR-15 | Рабочий трёхколоночный интерфейс, единый контекст и поиск | I | P1 | [App](../frontend/src/App.tsx), [E2E context](../frontend/e2e/tests/05-workspace-context.spec.ts) |
 | FR-16 | Полный, постраничный и детерминированный поиск исполнителей | P | P1 | Сейчас первый 100; G4 / PR #31 |
 | FR-17 | Версионируемые маршруты, статусы и формы Configurator v2 | N | P1 | G5 / PR #32 |

@@ -331,3 +331,309 @@ def test_invalid_document_and_enterprise_isolation(
     assert client.get(
         f"{BASE}/persons/{s['other_person']}/fields",
     ).status_code == 200
+
+
+# PR #32 — isolated non-safety service workflows; no WorkOrder override.
+
+
+def workflow_payload() -> dict:
+    return {
+        "code": "service_intake", "title": "Technical service intake",
+        "document": {
+            "fields": [
+                {"code": "service_note", "label": "Service note", "kind": "text",
+                 "required": True, "max_length": 120},
+                {"code": "priority_hint", "label": "Informational priority",
+                 "kind": "choice", "options": ["normal", "follow_up"]},
+            ],
+            "initial_state": "draft",
+            "states": [
+                {"code": "draft", "label": "Draft"},
+                {"code": "submitted", "label": "Submitted"},
+                {"code": "resolved", "label": "Resolved", "terminal": True},
+                {"code": "rejected", "label": "Rejected", "terminal": True},
+            ],
+            "transitions": [
+                {"code": "submit", "label": "Send for review",
+                 "from_state": "draft", "to_state": "submitted", "actor": "creator"},
+                {"code": "resolve", "label": "Manager review",
+                 "from_state": "submitted", "to_state": "resolved",
+                 "actor": "manager", "independent_review": True},
+                {"code": "reject", "label": "Admin review",
+                 "from_state": "submitted", "to_state": "rejected",
+                 "actor": "admin", "independent_review": True},
+            ],
+        },
+    }
+
+
+def publish_service_workflow(client: TestClient, enterprise_id: str) -> dict:
+    created = post(
+        client, f"{BASE}/enterprises/{enterprise_id}/workflow-versions",
+        workflow_payload(),
+    )
+    vid = created["id"]
+    assert client.post(
+        f"{BASE}/workflow-versions/{vid}/validate", headers=login(client),
+    ).status_code == 200
+    assert client.post(
+        f"{BASE}/workflow-versions/{vid}/approve",
+        headers=login(client, "config-reviewer"),
+    ).status_code == 200
+    published = client.post(
+        f"{BASE}/workflow-versions/{vid}/publish",
+        headers=login(client), json={"effective_on": date.today().isoformat()},
+    )
+    assert published.status_code == 200, published.text
+    return published.json()
+
+
+def test_v2_workflow_definition_validation_dual_control_and_activation(
+    scenario: tuple[TestClient, Session],
+) -> None:
+    client, db = scenario
+    s = seed(client, db)
+    root = f"{BASE}/enterprises/{s['enterprise']}"
+    for bad in (
+        {"document": {**workflow_payload()["document"], "fields": [
+            {"code": "service_note", "label": "Note", "kind": "text",
+             "untrusted_script": "should not be accepted"},
+        ]}},
+        {"document": {**workflow_payload()["document"], "transitions": []}},
+        {"document": {**workflow_payload()["document"], "initial_state": "resolved"}},
+        {"document": {**workflow_payload()["document"], "states": [
+            {"code": "draft", "label": "Draft"},
+            {"code": "draft", "label": "Dup"},
+        ]}},
+        {"document": {**workflow_payload()["document"], "transitions": [
+            {"code": "bypass", "label": "Unauthorized",
+             "from_state": "draft", "to_state": "resolved", "actor": "creator"},
+        ]}},
+        {"document": {**workflow_payload()["document"], "fields": [
+            {"code": "permit_override", "label": "Unsafe", "kind": "boolean"},
+        ]}},
+    ):
+        payload = {**workflow_payload(), **bad}
+        assert client.post(
+            root + "/workflow-versions", headers=login(client), json=payload,
+        ).status_code == 422
+    created = post(client, root + "/workflow-versions", workflow_payload())
+    assert created["version"] == 1 and created["status"] == "draft"
+    vid = created["id"]
+    login(client, "config-viewer")
+    assert client.get(root + "/workflow-versions").status_code == 403
+    assert client.get(root + "/workflows/active").json() == []
+    assert client.post(
+        f"{BASE}/workflow-versions/{vid}/validate", headers=login(client, "config-viewer"),
+    ).status_code == 403
+    login(client)
+    assert client.post(
+        f"{BASE}/workflow-versions/{vid}/approve", headers=login(client),
+    ).status_code == 409
+    validated = client.post(
+        f"{BASE}/workflow-versions/{vid}/validate", headers=login(client),
+    )
+    assert validated.status_code == 200
+    assert client.post(
+        f"{BASE}/workflow-versions/{vid}/approve", headers=login(client),
+    ).status_code == 403
+    approved = client.post(
+        f"{BASE}/workflow-versions/{vid}/approve",
+        headers=login(client, "config-reviewer"),
+    )
+    assert approved.status_code == 200
+    publish_url = f"{BASE}/workflow-versions/{vid}/publish"
+    assert client.post(publish_url, json={
+        "effective_on": date.today().isoformat(),
+    }).status_code == 403
+    assert client.post(
+        publish_url, headers=login(client), json={
+            "effective_on": (date.today() - timedelta(days=1)).isoformat(),
+        },
+    ).status_code == 422
+    assert client.post(
+        publish_url, headers=login(client), json={
+            "effective_on": date.today().isoformat(),
+        },
+    ).status_code == 200
+    assert client.put(
+        f"{BASE}/workflow-versions/{vid}",
+        headers=login(client), json=workflow_payload(),
+    ).status_code == 409
+    login(client, "config-manager")
+    assert len(client.get(root + "/workflows/active").json()) == 1
+    login(client, "config-denied")
+    assert client.get(root + "/workflows/active").status_code == 404
+    assert client.get(root + "/service-requests").status_code == 404
+    audit_events = list(db.scalars(select(ConfigurationAudit)).all())
+    assert {"workflow.created", "workflow.approved", "workflow.published"} <= {
+        e.action for e in audit_events
+    }
+
+
+def test_v2_service_request_transitions_scope_audit_and_hard_boundary(
+    scenario: tuple[TestClient, Session],
+) -> None:
+    client, db = scenario
+    s = seed(client, db)
+    published = publish_service_workflow(client, s["enterprise"])
+    create_url = f"{BASE}/enterprises/{s['enterprise']}/service-requests"
+    payload = {
+        "workflow_code": "service_intake", "unit_id": s["unit"],
+        "title": "Synthetic request for a technical service",
+        "values": {"service_note": "Improve workstation documentation"},
+    }
+    for invalid in (
+        {"service_note": "x" * 121},
+        {"service_note": "ok", "permit_override": True},
+        {},
+        {"service_note": 1234},
+    ):
+        assert client.post(
+            create_url, headers=login(client, "config-viewer"),
+            json={**payload, "values": invalid},
+        ).status_code == 422
+    assert client.post(create_url, json=payload).status_code == 403
+    assert client.post(
+        create_url, headers=login(client, "config-denied"), json=payload,
+    ).status_code == 404
+    created = client.post(
+        create_url, headers=login(client, "config-viewer"), json=payload,
+    )
+    assert created.status_code == 201, created.text
+    row = created.json()
+    assert row["state"] == "draft" and row["workflow_version"] == published["version"]
+    cid = row["id"]
+    move = f"{BASE}/service-requests/{cid}/transitions"
+    assert client.post(move, headers=login(client, "config-manager"), json={
+        "transition_code": "submit", "expected_state": "draft",
+    }).status_code == 403
+    assert client.post(move, headers=login(client, "config-viewer"), json={
+        "transition_code": "resolve", "expected_state": "draft",
+    }).status_code == 409
+    submitted = client.post(move, headers=login(client, "config-viewer"), json={
+        "transition_code": "submit", "expected_state": "draft",
+    })
+    assert submitted.status_code == 200 and submitted.json()["state"] == "submitted"
+    assert client.post(move, headers=login(client, "config-viewer"), json={
+        "transition_code": "resolve", "expected_state": "submitted",
+    }).status_code == 403
+    assert client.post(move, headers=login(client, "config-manager"), json={
+        "transition_code": "resolve", "expected_state": "draft",
+    }).status_code == 409
+    assert client.post(move, headers=login(client, "config-manager"), json={
+        "transition_code": "resolve", "expected_state": "submitted",
+    }).status_code == 422
+    assert client.post(move, headers=login(client, "config-manager"), json={
+        "transition_code": "resolve", "expected_state": "submitted",
+        "note": "Reviewed internally; not a physical safety authorization",
+    }).status_code == 200
+    assert client.post(move, headers=login(client, "config-manager"), json={
+        "transition_code": "submit", "expected_state": "resolved",
+    }).status_code == 409
+    history = client.get(f"{BASE}/service-requests/{cid}/history").json()
+    assert [(h["transition_code"], h["to_state"]) for h in history] == [
+        ("created", "draft"), ("submit", "submitted"), ("resolve", "resolved"),
+    ]
+    # Audit contains metadata but never free-form field values.
+    events = list(db.scalars(select(ConfigurationAudit)).all())
+    assert any(e.action == "workflow.case_transitioned" for e in events)
+    assert all("Improve workstation documentation" not in str(e.details_json) for e in events)
+    login(client, "config-manager")
+    pinned = client.get(f"{BASE}/service-requests/{cid}/definition")
+    assert pinned.status_code == 200 and pinned.json()["version"] == 1
+    login(client, "config-denied")
+    assert client.get(f"{BASE}/service-requests/{cid}/definition").status_code == 404
+    assert client.get(f"{BASE}/service-requests/{cid}").status_code == 404
+    assert client.get(f"{BASE}/service-requests/{cid}/history").status_code == 404
+    assert client.post(move, headers=login(client, "config-denied"), json={
+        "transition_code": "submit", "expected_state": "draft",
+    }).status_code == 404
+    login(client, "config-manager")
+    rows = client.get(create_url).json()
+    assert len(rows) == 1 and rows[0]["id"] == cid
+    # Informational workflow never mutates any WorkOrders or permits.
+    from app.work.models import WorkOrder
+    assert db.scalars(select(WorkOrder)).all() == []
+
+
+def test_v2_version_pinning_and_cross_enterprise_boundary(
+    scenario: tuple[TestClient, Session],
+) -> None:
+    client, db = scenario
+    s = seed(client, db)
+    published = publish_service_workflow(client, s["enterprise"])
+    root = f"{BASE}/enterprises/{s['enterprise']}"
+    first = client.post(root + "/service-requests", headers=login(client), json={
+        "workflow_code": "service_intake", "unit_id": s["unit"],
+        "title": "One pinned service request",
+        "values": {"service_note": "First snapshot"},
+    })
+    assert first.status_code == 201
+    new_def = workflow_payload()
+    new_def["document"]["states"][1]["label"] = "Submitted v2"
+    created = post(client, root + "/workflow-versions", new_def)
+    assert created["version"] == 2
+    vid = created["id"]
+    assert client.post(
+        f"{BASE}/workflow-versions/{vid}/validate", headers=login(client),
+    ).status_code == 200
+    assert client.post(
+        f"{BASE}/workflow-versions/{vid}/approve",
+        headers=login(client, "config-reviewer"),
+    ).status_code == 200
+    assert client.post(
+        f"{BASE}/workflow-versions/{vid}/publish", headers=login(client), json={
+            "effective_on": date.today().isoformat(),
+        },
+    ).status_code == 409
+    assert client.post(
+        f"{BASE}/workflow-versions/{vid}/publish", headers=login(client), json={
+            "effective_on": (date.today() + timedelta(days=1)).isoformat(),
+        },
+    ).status_code == 200
+    assert client.get(root + "/workflows/active").json()[0]["id"] == published["id"]
+    assert client.get(
+        f"{BASE}/service-requests/{first.json()['id']}",
+    ).json()["workflow_version"] == 1
+    other = post(client, "/api/v1/org/enterprises", {
+        "code": "workflow-elsewhere", "name": "Other tenant",
+    })["id"]
+    assert client.get(f"{BASE}/enterprises/{other}/workflow-versions").json() == []
+    assert client.post(
+        f"{BASE}/enterprises/{other}/service-requests", headers=login(client),
+        json={"workflow_code": "service_intake", "unit_id": s["unit"],
+              "title": "Foreign request", "values": {"service_note": "x"}},
+    ).status_code == 404
+
+
+def test_v2_manager_creator_cannot_issue_independent_terminal_decision(
+    scenario: tuple[TestClient, Session],
+) -> None:
+    client, db = scenario
+    s = seed(client, db)
+    publish_service_workflow(client, s["enterprise"])
+    root = f"{BASE}/enterprises/{s['enterprise']}"
+    response = client.post(root + "/service-requests", headers=login(client, "config-manager"),
+        json={
+            "workflow_code": "service_intake", "unit_id": s["unit"],
+            "title": "Manager created informational request",
+            "values": {"service_note": "A non-safety note"},
+        })
+    assert response.status_code == 201, response.text
+    case_id = response.json()["id"]
+    url = f"{BASE}/service-requests/{case_id}/transitions"
+    assert client.post(url, headers=login(client, "config-manager"), json={
+        "transition_code": "submit", "expected_state": "draft",
+    }).status_code == 200
+    assert client.post(url, headers=login(client, "config-manager"), json={
+        "transition_code": "resolve", "expected_state": "submitted",
+        "note": "Manager must not self-review the request",
+    }).status_code == 403
+    reviewed = client.post(url, headers=login(client, "config-reviewer"), json={
+        "transition_code": "resolve", "expected_state": "submitted",
+        "note": "Reviewed by independent administrator",
+    })
+    assert reviewed.status_code == 200
+    assert reviewed.json()["state"] == "resolved"
+    assert len(client.get(f"{BASE}/service-requests/{case_id}/history").json()) == 3
