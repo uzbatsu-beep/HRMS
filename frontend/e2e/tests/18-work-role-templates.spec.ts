@@ -27,12 +27,14 @@ test("admin applies scoped work template; worker cannot bypass org scope", async
   await loginUI(page);
   const me = await page.request.get("/api/v1/auth/me");
   const csrf = (await me.json() as { csrf_token: string }).csrf_token;
+  const userResponse = await page.request.get("/api/v1/auth/users");
+  const users = await userResponse.json() as { id: string; username: string }[];
+  const viewer = users.find((user) => user.username === seed.users.viewer);
+  expect(viewer).toBeDefined();
   const scope = await page.request.post("/api/v1/org/scopes", {
     headers: { "X-CSRF-Token": csrf },
     data: {
-      user_id: (await (await page.request.get("/api/v1/auth/users")).json()
-        as { id: string; username: string }[])
-        .find(user => user.username === seed.users.viewer)!.id,
+      user_id: viewer!.id,
       unit_id: seed.units.automation, include_descendants: false,
     },
   });
@@ -47,9 +49,11 @@ test("admin applies scoped work template; worker cannot bypass org scope", async
   expect(capabilities.crew).toBe(true);
   expect(capabilities.start).toBe(false);
   expect(capabilities.create).toBe(false);
-  const unauthorized = await page.request.post("/api/v1/work/orders/" + seed.work.id
-    + "/cancel", { headers: { "X-CSRF-Token":
-      (await (await page.request.get("/api/v1/auth/me")).json()
-        as { csrf_token: string }).csrf_token } });
+  const current = await page.request.get("/api/v1/auth/me");
+  const viewerCsrf = (await current.json() as { csrf_token: string }).csrf_token;
+  const unauthorized = await page.request.post(
+    "/api/v1/work/orders/" + seed.work.id + "/cancel",
+    { headers: { "X-CSRF-Token": viewerCsrf } },
+  );
   expect(unauthorized.status()).toBe(403);
 });
