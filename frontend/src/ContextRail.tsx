@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useWorkspace, type WorkspaceUnit } from "./WorkspaceContext";
+import RequestState from "./RequestState";
 
 type Session = { user: { id: string; username: string; role: string } };
 type Unit = WorkspaceUnit;
@@ -106,9 +107,10 @@ export default function ContextRail({
         setError("");
       })
       .catch((reason: unknown) => {
-        if (!controller.signal.aborted) setError(
-          reason instanceof Error ? reason.message : "Ошибка списка персонала",
-        );
+        if (controller.signal.aborted) return;
+        setError(reason instanceof Error ? reason.message : "Ошибка списка персонала");
+        if (offset === 0) setPersons([]);
+        setMoreAvailable(false);
       })
       .finally(() => { if (!controller.signal.aborted) setPeopleLoading(false); });
     return () => controller.abort();
@@ -124,7 +126,8 @@ export default function ContextRail({
           <small>РАБОЧИЙ КОНТЕКСТ</small>
           <h2>Структура и персонал</h2>
         </div>
-        <button type="button" title="Обновить данные" className="rail-refresh"
+        <button type="button" title="Обновить данные" aria-label="Обновить данные"
+          className="rail-refresh"
           onClick={() => { refreshContext(); setRefresh((old) => old + 1); }}>↻</button>
       </div>
       {!session ? (
@@ -151,6 +154,7 @@ export default function ContextRail({
             </div>
             <div className="rail-tree" role="group" aria-label="Дерево подразделений">
               <button type="button" className={`rail-unit ${!unitId ? "active" : ""}`}
+                aria-pressed={!unitId}
                 onClick={() => setUnitId("")}>
                 <span className="rail-tree-symbol">▣</span>
                 <span>{activeCompany?.name ?? "Все подразделения"}</span>
@@ -158,6 +162,7 @@ export default function ContextRail({
               {hierarchy.map(({ unit, depth }) => (
                 <button key={unit.id} type="button"
                   className={`rail-unit ${unitId === unit.id ? "active" : ""}`}
+                  aria-pressed={unitId === unit.id}
                   style={{ paddingLeft: `${14 + Math.min(depth, 7) * 14}px` }}
                   onClick={() => setUnitId(unit.id)}
                   title={unit.name}>
@@ -182,8 +187,14 @@ export default function ContextRail({
               <input value={search} onChange={(e) => setSearch(e.target.value)}
                 placeholder="Фамилия, имя или таб. №" />
             </label>
-            <div className="rail-people-list">
-              {persons.map((person) => (
+            <div className="rail-people-list" aria-busy={peopleLoading}>
+              {!peopleLoading && error && (
+                <RequestState kind="error" title="Не удалось загрузить персонал"
+                  detail={error} actionLabel="Повторить запрос"
+                  onAction={() => setRefresh((value) => value + 1)} />
+              )}
+              {persons.map((person) => !error && (
+
                 <button type="button" className="rail-person" key={person.id}
                   onClick={() => onPersonSelect({
                     enterpriseId, personId: person.id, unitId: person.current_unit_id,
@@ -195,11 +206,15 @@ export default function ContextRail({
                   </span>
                 </button>
               ))}
-              {!peopleLoading && persons.length === 0 &&
-                <p className="rail-empty-text">Нет сотрудников по выбранным условиям.</p>}
-              {peopleLoading && <p className="rail-empty-text">Загрузка персонала…</p>}
+              {!peopleLoading && !error && persons.length === 0 && (
+                <RequestState kind="empty" title="Сотрудники не найдены"
+                  detail="Измените подразделение или условия поиска." />
+              )}
+              {peopleLoading && persons.length === 0 && (
+                <RequestState kind="loading" title="Загрузка персонала…" />
+              )}
             </div>
-            {moreAvailable && !peopleLoading && (
+            {moreAvailable && !peopleLoading && !error && (
               <button className="rail-text-link" type="button"
                 onClick={() => setOffset((value) => value + 100)}>Показать ещё</button>
             )}
@@ -208,8 +223,11 @@ export default function ContextRail({
               Все карточки персонала
             </button>
           </section>
-          {(error || contextError) &&
-            <p className="rail-error" role="alert">{error || contextError}</p>}
+          {contextError && (
+            <RequestState kind="error" title="Контекст предприятия недоступен"
+              detail={contextError} actionLabel="Обновить контекст"
+              onAction={refreshContext} />
+          )}
         </>
       )}
     </aside>

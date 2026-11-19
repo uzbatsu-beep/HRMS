@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import AuthPanel from "./AuthPanel";
 import OrganizationPanel from "./OrganizationPanel";
 import PersonnelPanel from "./PersonnelPanel";
@@ -49,6 +49,8 @@ export default function App() {
   const [apiState, setApiState] = useState<ApiState>("checking");
   const [databaseState, setDatabaseState] = useState("Проверка...");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [healthRevision, setHealthRevision] = useState(0);
+  const mobileMenuToggle = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const onHash = () => { setPage(pageFromHash()); setMenuOpen(false); };
@@ -58,6 +60,8 @@ export default function App() {
 
   useEffect(() => {
     const controller = new AbortController();
+    setApiState("checking");
+    setDatabaseState("Проверка...");
     fetch("/api/v1/health/ready", { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error("API returned " + response.status);
@@ -73,13 +77,32 @@ export default function App() {
         setDatabaseState("Нет соединения");
       });
     return () => controller.abort();
-  }, []);
+  }, [healthRevision]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMenuOpen(false);
+        mobileMenuToggle.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", onEscape);
+    return () => window.removeEventListener("keydown", onEscape);
+  }, [menuOpen]);
+
+  function focusHeading() {
+    window.requestAnimationFrame(() =>
+      document.getElementById("workspace-page-heading")?.focus()
+    );
+  }
 
   function navigate(destination: string) {
     const target = navigation.find((item) => item.page === destination)?.page ?? "dashboard";
     window.location.hash = target;
     setPage(target);
     setMenuOpen(false);
+    focusHeading();
   }
 
   function focusPerson(person: PersonFocus) {
@@ -96,9 +119,14 @@ export default function App() {
 
   return (
     <div className="workspace">
+      <button type="button" className="workspace-skip-link"
+        onClick={() => document.getElementById("main-content")?.focus()}>
+        Перейти к основному содержимому
+      </button>
       <header className="workspace-topbar">
         <div className="workspace-brand-group">
           <button type="button" className="workspace-mobile-toggle"
+            ref={mobileMenuToggle} aria-controls="workspace-navigation"
             aria-label={menuOpen ? "Закрыть меню" : "Открыть меню"}
             aria-expanded={menuOpen} onClick={() => setMenuOpen((value) => !value)}>☰</button>
           <a className="brand" href="#dashboard" aria-label="TWM — обзор">
@@ -122,8 +150,15 @@ export default function App() {
         </div>
       </header>
 
+      {menuOpen && (
+        <button type="button" className="workspace-mobile-backdrop"
+          aria-label="Закрыть навигацию" onClick={() => {
+            setMenuOpen(false); mobileMenuToggle.current?.focus();
+          }} />
+      )}
       <div className="workspace-columns">
-        <aside className={`workspace-navigation ${menuOpen ? "open" : ""}`}
+        <aside id="workspace-navigation"
+          className={`workspace-navigation ${menuOpen ? "open" : ""}`}
           aria-label="Основная навигация">
           <div className="nav-section-label">РАБОЧАЯ СРЕДА</div>
           <nav className="workspace-nav">
@@ -131,7 +166,9 @@ export default function App() {
               <a href={`#${item.page}`} key={item.page}
                 className={`workspace-nav-item ${page === item.page ? "active" : ""}`}
                 aria-current={page === item.page ? "page" : undefined}
-                onClick={() => { setPage(item.page); setMenuOpen(false); }}>
+                onClick={() => {
+                  setPage(item.page); setMenuOpen(false); focusHeading();
+                }}>
                 <span className="workspace-nav-icon" aria-hidden="true">{item.icon}</span>
                 <span className="workspace-nav-label">
                   <strong>{item.label}</strong>
@@ -147,12 +184,12 @@ export default function App() {
           </div>
         </aside>
 
-        <main className="workspace-main" id="main-content">
+        <main className="workspace-main" id="main-content" tabIndex={-1}>
           <div className="workspace-page-heading">
             <div>
               <WorkspaceBreadcrumbs pageLabel={active.label} navigate={navigate} />
               <div className="eyebrow">TWM / {active.page.toUpperCase()}</div>
-              <h1>{active.label}</h1>
+              <h1 id="workspace-page-heading" tabIndex={-1}>{active.label}</h1>
               <p>{active.description}</p>
             </div>
           </div>
@@ -194,7 +231,14 @@ export default function App() {
                 </div>
               </div>
               {apiState === "unavailable" && (
-                <p className="error-hint">Проверьте Docker Compose и миграции базы данных.</p>
+                <div className="workspace-retry">
+                  <p className="error-hint">
+                    Проверьте Docker Compose и миграции базы данных.
+                  </p>
+                  <button type="button" onClick={() => setHealthRevision((value) => value + 1)}>
+                    Повторить проверку
+                  </button>
+                </div>
               )}
             </section>
           )}

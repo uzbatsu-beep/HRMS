@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useWorkspace } from "./WorkspaceContext";
+import RequestState from "./RequestState";
 
 type DailyTrend = { day: string; created: number; completed: number };
 type DashboardData = {
@@ -127,17 +128,18 @@ export default function DashboardPanel({
   const unit = units.find((item) => item.id === unitId);
   if (error) {
     return (
-      <section className="ops-panel" role="alert">
-        <h2>Аналитика недоступна</h2>
-        <p>{error}</p>
-        <button type="button" onClick={() => setRevision((value) => value + 1)}>
-          Повторить запрос
-        </button>
+      <section className="ops-panel">
+        <RequestState kind="error" title="Аналитика недоступна" detail={error}
+          actionLabel="Повторить запрос" onAction={() => setRevision((value) => value + 1)} />
       </section>
     );
   }
   if (!data) {
-    return <section className="ops-panel" role="status">Загрузка показателей…</section>;
+    return (
+      <section className="ops-panel">
+        <RequestState kind="loading" title="Загрузка показателей…" />
+      </section>
+    );
   }
 
   const maxTrend = Math.max(1, ...data.trends.flatMap((d) => [d.created, d.completed]));

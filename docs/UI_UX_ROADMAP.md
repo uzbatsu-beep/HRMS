@@ -268,3 +268,19 @@ module contains an admin-only matrix for all five existing operation codes;
 Competence and Credentials use a Person-specific capability endpoint.
 See ADR-0021. Roles remain fixed; future work includes planning and Work
 Management operations, reviewer qualifications and role templates.
+
+### PR #29 — Workspace UX consistency and keyboard flows (proposed)
+
+Scope: add a shared React `RequestState` primitive (loading/empty/error/retry)
+to the Dashboard and contextual personnel rail, make global personnel search
+keyboard-operable (ArrowUp/ArrowDown, active descendant, Enter, Escape),
+add a working skip-to-content control without overwriting hash-based routing,
+and harden the mobile menu with Escape, an outside backdrop and focus recovery.
+The system diagnostics panel can retry health checks without reloading the page.
+
+Explicit non-goals: no new backend RBAC or safety behavior, no dynamic workflow
+builder, no changes to persisted Person/WorkOrder records, no redesign of every
+existing domain form. Search remains scoped and limited by existing API contracts.
+Validation: TypeScript+Vite, Playwright E2E incl. keyboard/mobile/error recovery,
+and the full existing backend suite via CI. This section changes to
+"merged" only after owner review and successful merge.
