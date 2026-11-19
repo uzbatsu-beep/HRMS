@@ -395,6 +395,10 @@ def test_v2_workflow_definition_validation_dual_control_and_activation(
     s = seed(client, db)
     root = f"{BASE}/enterprises/{s['enterprise']}"
     for bad in (
+        {"document": {**workflow_payload()["document"], "fields": [
+            {"code": "service_note", "label": "Note", "kind": "text",
+             "untrusted_script": "should not be accepted"},
+        ]}},
         {"document": {**workflow_payload()["document"], "transitions": []}},
         {"document": {**workflow_payload()["document"], "initial_state": "resolved"}},
         {"document": {**workflow_payload()["document"], "states": [
@@ -519,6 +523,9 @@ def test_v2_service_request_transitions_scope_audit_and_hard_boundary(
     }).status_code == 409
     assert client.post(move, headers=login(client, "config-manager"), json={
         "transition_code": "resolve", "expected_state": "submitted",
+    }).status_code == 422
+    assert client.post(move, headers=login(client, "config-manager"), json={
+        "transition_code": "resolve", "expected_state": "submitted",
         "note": "Reviewed internally; not a physical safety authorization",
     }).status_code == 200
     assert client.post(move, headers=login(client, "config-manager"), json={
@@ -532,7 +539,11 @@ def test_v2_service_request_transitions_scope_audit_and_hard_boundary(
     events = list(db.scalars(select(ConfigurationAudit)).all())
     assert any(e.action == "workflow.case_transitioned" for e in events)
     assert all("Improve workstation documentation" not in str(e.details_json) for e in events)
+    login(client, "config-manager")
+    pinned = client.get(f"{BASE}/service-requests/{cid}/definition")
+    assert pinned.status_code == 200 and pinned.json()["version"] == 1
     login(client, "config-denied")
+    assert client.get(f"{BASE}/service-requests/{cid}/definition").status_code == 404
     assert client.get(f"{BASE}/service-requests/{cid}").status_code == 404
     assert client.get(f"{BASE}/service-requests/{cid}/history").status_code == 404
     assert client.post(move, headers=login(client, "config-denied"), json={
@@ -594,3 +605,35 @@ def test_v2_version_pinning_and_cross_enterprise_boundary(
         json={"workflow_code": "service_intake", "unit_id": s["unit"],
               "title": "Foreign request", "values": {"service_note": "x"}},
     ).status_code == 404
+
+
+def test_v2_manager_creator_cannot_issue_independent_terminal_decision(
+    scenario: tuple[TestClient, Session],
+) -> None:
+    client, db = scenario
+    s = seed(client, db)
+    publish_service_workflow(client, s["enterprise"])
+    root = f"{BASE}/enterprises/{s['enterprise']}"
+    response = client.post(root + "/service-requests", headers=login(client, "config-manager"),
+        json={
+            "workflow_code": "service_intake", "unit_id": s["unit"],
+            "title": "Manager created informational request",
+            "values": {"service_note": "A non-safety note"},
+        })
+    assert response.status_code == 201, response.text
+    case_id = response.json()["id"]
+    url = f"{BASE}/service-requests/{case_id}/transitions"
+    assert client.post(url, headers=login(client, "config-manager"), json={
+        "transition_code": "submit", "expected_state": "draft",
+    }).status_code == 200
+    assert client.post(url, headers=login(client, "config-manager"), json={
+        "transition_code": "resolve", "expected_state": "submitted",
+        "note": "Manager must not self-review the request",
+    }).status_code == 403
+    reviewed = client.post(url, headers=login(client, "config-reviewer"), json={
+        "transition_code": "resolve", "expected_state": "submitted",
+        "note": "Reviewed by independent administrator",
+    })
+    assert reviewed.status_code == 200
+    assert reviewed.json()["state"] == "resolved"
+    assert len(client.get(f"{BASE}/service-requests/{case_id}/history").json()) == 3

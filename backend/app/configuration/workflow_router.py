@@ -437,6 +437,8 @@ def move_service_case(
         raise HTTPException(status_code=403, detail="Administrator role required")
     if transition.independent_review and user.id == row.created_by:
         raise HTTPException(status_code=403, detail="Independent reviewer required")
+    if transition.independent_review and len(payload.note.strip()) < 10:
+        raise HTTPException(status_code=422, detail="Independent review requires a reason")
     before = row.state
     row.state = transition.to_state
     db.add(WorkflowCaseEvent(

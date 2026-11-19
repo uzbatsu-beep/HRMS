@@ -38,10 +38,16 @@ class WorkflowTransition(BaseModel):
         return self
 
 
+class WorkflowField(CustomField):
+    """Refuse unrecognized field options (especially invented safety flags)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class WorkflowDocument(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    fields: list[CustomField] = Field(default_factory=list, max_length=12)
+    fields: list[WorkflowField] = Field(default_factory=list, max_length=12)
     states: list[WorkflowState] = Field(min_length=2, max_length=8)
     transitions: list[WorkflowTransition] = Field(min_length=1, max_length=24)
     initial_state: str
@@ -89,6 +95,12 @@ class WorkflowDefinitionCreate(BaseModel):
     document: WorkflowDocument
 
     @model_validator(mode="after")
+    def checked_title(self) -> "WorkflowDefinitionCreate":
+        if not self.title.strip():
+            raise ValueError("Workflow title cannot be blank")
+        return self
+
+    @model_validator(mode="after")
     def only_service_metadata(self) -> "WorkflowDefinitionCreate":
         protected = ("permit", "work_order", "safety", "credential", "qualification",
                      "authorization", "access", "equipment")
@@ -120,6 +132,12 @@ class WorkflowCaseCreate(BaseModel):
     unit_id: UUID
     title: str = Field(min_length=3, max_length=200)
     values: dict[str, str | int | bool | None] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def title_not_blank(self) -> "WorkflowCaseCreate":
+        if not self.title.strip():
+            raise ValueError("Request title cannot be blank")
+        return self
 
     @model_validator(mode="after")
     def size(self) -> "WorkflowCaseCreate":
