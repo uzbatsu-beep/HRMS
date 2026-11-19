@@ -43,7 +43,10 @@ test("candidate paging and code search stay scoped and do not change assignment"
   expect(nextPage.items[0].person_id).not.toBe(firstPage.items[0].person_id);
 
   await page.goto("/#work");
-  await page.locator(".wm-orders").getByRole("button").filter({ hasText: code }).click();
+  await page.locator(".wm-enterprise select").selectOption(s.enterprise.id);
+  const orders = page.locator(".wm-orders");
+  await expect(orders).toContainText(code);
+  await orders.getByRole("button").filter({ hasText: code }).click();
   const input = page.locator(".wm-matching")
     .getByRole("searchbox", { name: "Поиск по ФИО или табельному коду" });
   await input.fill(s.people.unqualified.employee_code);
