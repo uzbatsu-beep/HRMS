@@ -3,7 +3,7 @@
 
 Конфигурируемое веб-приложение для управления внутренними техническими службами производственного предприятия: механика, электрика, энергетика, АСУ ТП, робототехника, метрология и другие инженерные подразделения.
 
-[Запуск и проверки](docs/DEVELOPMENT.md) · [Статус реализации](docs/IMPLEMENTATION_STATUS.md) · [План](docs/DEVELOPMENT_PLAN.md) · [Как внести изменения](CONTRIBUTING.md) · [Безопасность](SECURITY.md)
+[Запуск и проверки](docs/DEVELOPMENT.md) · [Статус реализации](docs/IMPLEMENTATION_STATUS.md) · [Дорожная карта v0.3](docs/ROADMAP_V0_3.md) · [Матрица требований](docs/REQUIREMENTS_MATRIX.md) · [Приёмка](docs/ACCEPTANCE_PLAN.md) · [Безопасность](SECURITY.md)
 
 Лицензия проекта — GNU General Public License, только версия 3 (`GPL-3.0-only`). Copyright © 2026 Фёдор Кочедыков. [Полный текст лицензии](LICENSE)
 
