@@ -2710,3 +2710,174 @@ def test_equipment_and_personnel_review_permissions_are_independent(
             "decision": "approved", "note": "Independent skill-only reviewer is allowed",
         },
     ).status_code == 200
+
+
+# PR #30 — work operation authorization and immutable job-function templates.
+
+def _work_grant(
+    client: TestClient, s: dict, user_id: str, code: str,
+    unit: str | None = None,
+) -> dict:
+    return post(client, "/api/v1/org/permissions", {
+        "user_id": user_id, "unit_id": unit or s["unit"], "code": code,
+    })
+
+
+def _apply_work_template(
+    client: TestClient, s: dict, user_id: str, template: str,
+) -> dict:
+    response = client.post(
+        "/api/v1/org/permission-templates/apply",
+        headers=auth(client),
+        json={"user_id": user_id, "unit_id": s["unit"], "template": template},
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def _work_viewer_id(db: Session) -> str:
+    user = db.scalar(select(UserAccount).where(UserAccount.username == "wm-viewer"))
+    assert user is not None
+    return str(user.id)
+
+
+def test_work_role_templates_are_atomic_idempotent_and_audited(
+    scenario: tuple[TestClient, Session],
+) -> None:
+    client, db = scenario
+    s = seed(client)
+    viewer_id = _work_viewer_id(db)
+    data = {"user_id": viewer_id, "unit_id": s["unit"], "template": "work.planner"}
+    assert client.get("/api/v1/org/permission-templates").status_code == 200
+    assert client.post("/api/v1/org/permission-templates/apply", json=data).status_code == 403
+    assert client.post("/api/v1/org/permission-templates/apply",
+        headers=auth(client), json={**data, "template": "system.admin"},
+    ).status_code == 422
+    first = _apply_work_template(client, s, viewer_id, "work.planner")
+    assert set(first["granted_codes"]) == {"work.order.create", "work.order.priority"}
+    assert _apply_work_template(client, s, viewer_id, "work.planner")["granted_codes"] == []
+    stored = client.get("/api/v1/org/permissions", params={
+        "user_id": viewer_id, "unit_id": s["unit"],
+    }).json()
+    assert {r["code"] for r in stored} == set(first["granted_codes"])
+    logs = list(db.scalars(select(OrganizationAuditEvent)).all())
+    assert any(e.action == "permission.template_applied" for e in logs)
+    assert len([e for e in logs if e.action == "permission.template_applied"]) == 1
+    auth(client, "wm-viewer")
+    assert client.get("/api/v1/org/permission-templates").status_code == 403
+    assert client.post("/api/v1/org/permission-templates/apply",
+        headers=auth(client, "wm-viewer"), json=data,
+    ).status_code == 403
+
+
+def test_work_grant_never_creates_scope_and_never_inherits_to_child(
+    scenario: tuple[TestClient, Session],
+) -> None:
+    client, db = scenario
+    s = seed(client)
+    viewer_id = _work_viewer_id(db)
+    _work_grant(client, s, viewer_id, "work.order.create")
+    create_url = f"{BASE}/enterprises/{s['enterprise']}/orders"
+    assert client.post(create_url, headers=auth(client, "wm-viewer"),
+        json=work_payload(s, "viewer-no-scope"),
+    ).status_code == 404
+    assert client.get(
+        f"{BASE}/enterprises/{s['enterprise']}/units/{s['unit']}/capabilities"
+    ).status_code == 404
+    post(client, "/api/v1/org/scopes", {
+        "user_id": viewer_id, "unit_id": s["unit"], "include_descendants": True,
+    })
+    type_id = client.get(
+        f"/api/v1/org/enterprises/{s['enterprise']}/types"
+    ).json()[0]["id"]
+    child = post(client, f"/api/v1/org/enterprises/{s['enterprise']}/units", {
+        "code": "delegation-child", "name": "Delegation Child",
+        "type_id": type_id, "parent_id": s["unit"],
+    })["id"]
+    auth(client, "wm-viewer")
+    root_caps = client.get(
+        f"{BASE}/enterprises/{s['enterprise']}/units/{s['unit']}/capabilities"
+    ).json()
+    child_caps = client.get(
+        f"{BASE}/enterprises/{s['enterprise']}/units/{child}/capabilities"
+    ).json()
+    assert root_caps["create"] is True and root_caps["assign"] is False
+    assert child_caps["create"] is False
+    child_payload = {**work_payload(s, "child-unprivileged"), "unit_id": child}
+    assert client.post(create_url, headers=auth(client, "wm-viewer"),
+        json=child_payload,
+    ).status_code == 403
+    result = client.post(create_url, headers=auth(client, "wm-viewer"),
+        json=work_payload(s, "viewer-root-work"),
+    )
+    assert result.status_code == 201, result.text
+    assert result.json()["unit_id"] == s["unit"]
+
+
+def test_delegated_dispatch_preserves_hard_gates_and_immediate_revocation(
+    scenario: tuple[TestClient, Session],
+) -> None:
+    client, db = scenario
+    s = seed(client)
+    viewer_id = _work_viewer_id(db)
+    work = create_work(client, s, "delegated-hard-gates")
+    post(client, "/api/v1/org/scopes", {
+        "user_id": viewer_id, "unit_id": s["unit"], "include_descendants": False,
+    })
+    auth(client, "wm-viewer")
+    caps = client.get(f"{BASE}/orders/{work['id']}/capabilities")
+    assert caps.status_code == 200 and not any(caps.json().values())
+    assert assign(client, work, s["person"], "wm-viewer").status_code == 403
+    template = _apply_work_template(client, s, viewer_id, "work.dispatcher")
+    assert "work.order.assign" in template["granted_codes"]
+    auth(client, "wm-viewer")
+    caps = client.get(f"{BASE}/orders/{work['id']}/capabilities").json()
+    assert caps["assign"] and caps["crew"] and not caps["start"]
+    assert not caps["create"] and not caps["resume"]
+    assert assign(client, work, s["person"], "wm-viewer").status_code == 409
+    verified_skills(client, s)
+    verified_permit(client, s)
+    accepted = assign(client, work, s["person"], "wm-viewer")
+    assert accepted.status_code == 200, accepted.text
+    assert accepted.json()["status"] == "assigned"
+    assert client.post(
+        f"{BASE}/orders/{work['id']}/start", headers=auth(client, "wm-viewer"),
+    ).status_code == 403
+    auth(client)
+    assigned_grant = next(item for item in client.get(
+        "/api/v1/org/permissions", params={"user_id": viewer_id},
+    ).json() if item["code"] == "work.order.assign")
+    assert client.delete(
+        "/api/v1/org/permissions/" + assigned_grant["id"], headers=auth(client),
+    ).status_code == 204
+    another = create_work(client, s, "delegated-revoked")
+    auth(client, "wm-viewer")
+    assert client.get(f"{BASE}/orders/{another['id']}/capabilities").json()["assign"] is False
+    assert assign(client, another, s["other_person"], "wm-viewer").status_code == 403
+    assert client.get(f"{BASE}/orders/{another['id']}").status_code == 200
+
+
+def test_manager_legacy_dispatch_rights_keep_scope_and_csrf(
+    scenario: tuple[TestClient, Session],
+) -> None:
+    client, db = scenario
+    s = seed(client)
+    manager = db.scalar(select(UserAccount).where(UserAccount.username == "wm-manager"))
+    assert manager is not None
+    post(client, "/api/v1/org/scopes", {
+        "user_id": str(manager.id), "unit_id": s["unit"], "include_descendants": False,
+    })
+    caps = client.get(
+        f"{BASE}/enterprises/{s['enterprise']}/units/{s['unit']}/capabilities",
+        headers=auth(client, "wm-manager"),
+    )
+    assert caps.status_code == 200 and all(caps.json().values())
+    work = create_work(client, s, "legacy-manager-30")
+    assert client.post(
+        f"{BASE}/orders/{work['id']}/cancel",
+        headers=auth(client, "wm-manager"),
+    ).status_code == 200
+    assert client.post(
+        f"{BASE}/enterprises/{s['enterprise']}/orders",
+        json=work_payload(s, "missing-csrf-30"),
+    ).status_code == 403
