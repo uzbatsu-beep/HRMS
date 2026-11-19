@@ -129,7 +129,7 @@ class UserUnitPermission(Base):
             "'credentials.record.review', 'work.order.create', 'work.order.assign', "
             "'work.crew.manage', 'work.order.priority', 'work.order.start', "
             "'work.order.complete', 'work.order.cancel', 'work.order.revalidate', "
-            "'work.order.hold', 'work.order.resume')"
+            "'work.order.hold', 'work.order.resume')",
             name="ck_unit_permission_code",
         ),
     )
