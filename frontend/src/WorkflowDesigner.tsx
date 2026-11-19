@@ -57,7 +57,7 @@ const actorLabels = {
 };
 
 function Group({ heading, children }: { heading: string; children: ReactNode }) {
-  return <fieldset className="config-field">
+  return <fieldset className="config-v2-field">
     <legend>{heading}</legend>
     {children}
   </fieldset>;
