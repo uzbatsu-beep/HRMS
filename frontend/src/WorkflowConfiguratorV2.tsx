@@ -92,9 +92,13 @@ export default function WorkflowConfiguratorV2() {
   }, [pinned, selectedCase, session?.user.id, session?.user.role]);
 
   useEffect(() => {
+    // Security boundary: reset all prior company/account selections immediately.
     setVersions([]); setActive([]); setCases([]);
     setSelectedVersionId(""); setSelectedCaseId(""); setPinned(null);
     setNotice(""); setError("");
+  }, [enterpriseId, session?.user.id]);
+
+  useEffect(() => {
     if (!enterpriseId || !session) return;
     let live = true;
     setLoading(true);
