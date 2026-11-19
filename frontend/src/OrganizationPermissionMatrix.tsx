@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 type Unit = { id: string; name: string };
 type Actor = { id: string; username: string; role: string };
 type Grant = { id: string; user_id: string; unit_id: string; code: string };
+type Template = { code: string; label: string; permissions: string[] };
 
 const rights: Record<string, string> = {
   "equipment.policy.read": "Оборудование · Просмотр согласований",
@@ -10,6 +11,16 @@ const rights: Record<string, string> = {
   "equipment.policy.review": "Оборудование · Независимое согласование",
   "competence.assessment.review": "Компетенции · Проверка оценки",
   "credentials.record.review": "Допуски · Проверка документа",
+  "work.order.create": "Наряд · Создать",
+  "work.order.assign": "Наряд · Назначить исполнителя",
+  "work.crew.manage": "Наряд · Состав бригады",
+  "work.order.priority": "Наряд · Приоритет",
+  "work.order.start": "Наряд · Начать",
+  "work.order.complete": "Наряд · Завершить",
+  "work.order.cancel": "Наряд · Отменить",
+  "work.order.revalidate": "Наряд · Повторная проверка",
+  "work.order.hold": "Наряд · Приостановить",
+  "work.order.resume": "Наряд · Возобновить",
 };
 
 export default function OrganizationPermissionMatrix({
@@ -19,12 +30,31 @@ export default function OrganizationPermissionMatrix({
   const [userId, setUserId] = useState("");
   const [code, setCode] = useState("competence.assessment.review");
   const [grants, setGrants] = useState<Grant[]>([]);
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [templateCode, setTemplateCode] = useState("work.dispatcher");
   const [revision, setRevision] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const currentUnitId = units.some(unit => unit.id === unitId)
     ? unitId : (units[0]?.id ?? "");
+
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/v1/org/permission-templates", { credentials: "same-origin" })
+      .then(async (response) => {
+        if (!response.ok) throw Error("HTTP " + response.status);
+        return await response.json() as Template[];
+      })
+      .then((items) => { if (active) setTemplates(items); })
+      .catch((cause: unknown) => {
+        if (active) setError(
+          cause instanceof Error ? cause.message : "Не удалось получить шаблоны",
+        );
+      });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -104,6 +134,26 @@ export default function OrganizationPermissionMatrix({
           "Полномочие выдано. Организационная область доступа настраивается отдельно.",
         )}>Выдать полномочие</button>
       </div>
+
+      <div className="org-form" aria-label="Шаблоны полномочий">
+        <label>Шаблон должностной функции
+          <select value={templateCode} onChange={(event) => setTemplateCode(event.target.value)}>
+            {templates.map((template) =>
+              <option key={template.code} value={template.code}>{template.label}</option>)}
+          </select>
+        </label>
+        <button type="button" className="org-button"
+          disabled={busy || !userId || !currentUnitId || templates.length === 0}
+          onClick={() => void change(
+            "/api/v1/org/permission-templates/apply", "POST",
+            { user_id: userId, unit_id: currentUnitId, template: templateCode },
+            "Шаблон применён. Область доступа настраивается отдельно.",
+          )}>Применить шаблон</button>
+      </div>
+      <p className="org-hint">
+        Шаблон выдаёт только отдельные права на выбранное подразделение, но не
+        меняет роль пользователя и не открывает доступ к другим подразделениям.
+      </p>
       {error && <p className="org-error" role="alert">{error}</p>}
       {notice && <p className="org-success" role="status">{notice}</p>}
       <div className="org-scopes">
