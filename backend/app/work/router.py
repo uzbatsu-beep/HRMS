@@ -17,7 +17,7 @@ from app.organization.access import allowed_unit_ids
 from app.organization.models import Enterprise, OrganizationUnit, UserUnitPermission
 from app.organization.permissions import can_work, work_capabilities
 from app.personnel.models import Person
-from app.personnel.service import require_visible_person, visible_person
+from app.personnel.service import require_visible_person
 from app.work import execution, service as work_service
 from app.work.candidate_query import page_candidates
 from app.work.models import WorkAuditEvent, WorkOrder, WorkOrderAssignment, WorkSkillRequirement

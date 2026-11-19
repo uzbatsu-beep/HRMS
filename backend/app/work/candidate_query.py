@@ -16,7 +16,7 @@ from app.identity.models import UserAccount
 from app.organization.access import allowed_unit_ids
 from app.personnel.models import EmploymentAssignment, Person, WorkforceResource
 from app.work.models import WorkOrder
-from app.work.schemas import CandidatePage, CandidateView
+from app.work.schemas import CandidatePage
 from app.work import service as work_service
 
 
