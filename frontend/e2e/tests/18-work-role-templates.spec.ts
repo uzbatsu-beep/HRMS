@@ -1,5 +1,11 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { demo, loginUI } from "../fixture";
+
+async function switchUser(page: Page, username?: string, password?: string) {
+  await page.goto("/#access");
+  await page.locator(".auth-current").getByRole("button", { name: "Выйти" }).click();
+  await loginUI(page, username, password);
+}
 
 test("admin applies scoped work template; worker cannot bypass org scope", async ({ page }) => {
   const seed = demo();
@@ -19,12 +25,12 @@ test("admin applies scoped work template; worker cannot bypass org scope", async
   await matrix.getByRole("button", { name: "Применить шаблон" }).click();
   await expect(matrix.getByRole("status")).toContainText("Шаблон применён");
 
-  await loginUI(page, seed.users.viewer, process.env.E2E_ACTOR_PASSWORD);
+  await switchUser(page, seed.users.viewer, process.env.E2E_ACTOR_PASSWORD);
   const url = "/api/v1/work/orders/" + seed.work.id + "/capabilities";
   const inaccessible = await page.request.get(url);
   expect(inaccessible.status()).toBe(404);
 
-  await loginUI(page);
+  await switchUser(page);
   const me = await page.request.get("/api/v1/auth/me");
   const csrf = (await me.json() as { csrf_token: string }).csrf_token;
   const userResponse = await page.request.get("/api/v1/auth/users");
@@ -39,7 +45,7 @@ test("admin applies scoped work template; worker cannot bypass org scope", async
     },
   });
   expect(scope.status()).toBe(201);
-  await loginUI(page, seed.users.viewer, process.env.E2E_ACTOR_PASSWORD);
+  await switchUser(page, seed.users.viewer, process.env.E2E_ACTOR_PASSWORD);
   const response = await page.request.get(url);
   expect(response.status()).toBe(200);
   const capabilities = await response.json() as {
