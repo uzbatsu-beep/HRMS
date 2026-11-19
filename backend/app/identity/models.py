@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, String, func
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -40,3 +40,18 @@ class LoginSession(Base):
     csrf_token: Mapped[str] = mapped_column(String(64), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class LoginFailureBucket(Base):
+    """Persistent hashed per-source/per-account counters, never raw client identifiers."""
+
+    __tablename__ = "login_failure_buckets"
+    __table_args__ = (
+        CheckConstraint("failure_count > 0", name="ck_login_failure_positive"),
+    )
+
+    bucket_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    failure_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )

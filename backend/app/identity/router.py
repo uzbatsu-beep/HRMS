@@ -11,6 +11,9 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.identity.models import LoginSession, UserAccount
+from app.identity.rate_limit import (
+    clear_successful_account_bucket, record_failed_login, require_login_budget,
+)
 from app.identity.schemas import LoginRequest, LoginResult, SessionResult, UserCreate, UserView
 from app.identity.security import (
     COOKIE_NAME,
@@ -27,6 +30,9 @@ from app.identity.security import (
 
 router = APIRouter(prefix=f"{settings.api_v1_prefix}/auth", tags=["identity"])
 
+# Spend roughly the same Argon2 work for unknown and known usernames.
+DUMMY_PASSWORD_HASH = hash_password(secrets.token_urlsafe(32))
+
 
 @router.post("/login", response_model=LoginResult)
 def login(
@@ -41,16 +47,18 @@ def login(
     if origin is not None and origin not in settings.cors_origins:
         raise HTTPException(status_code=403, detail="Origin not allowed")
 
-    user = db.scalar(
-        select(UserAccount).where(UserAccount.username == normalize_username(payload.username))
+    normalized = normalize_username(payload.username)
+    require_login_budget(db, request, normalized)
+    user = db.scalar(select(UserAccount).where(UserAccount.username == normalized))
+    candidate_hash = (
+        user.password_hash if user is not None and user.is_active else DUMMY_PASSWORD_HASH
     )
-    if (
-        user is None
-        or not user.is_active
-        or not verify_password(payload.password, user.password_hash)
-    ):
+    valid_password = verify_password(payload.password, candidate_hash)
+    if user is None or not user.is_active or not valid_password:
+        record_failed_login(db, request, normalized)
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
+    clear_successful_account_bucket(db, request, normalized)
     raw_token = secrets.token_urlsafe(32)
     csrf_token = secrets.token_urlsafe(32)
     record = LoginSession(

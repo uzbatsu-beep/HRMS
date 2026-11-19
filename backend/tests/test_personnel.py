@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from app.database import Base, get_db
-from app.identity.models import LoginSession, UserAccount
+from app.identity.models import LoginFailureBucket, LoginSession, UserAccount
 from app.identity.security import hash_password
 from app.main import app
 from app.organization.models import (
@@ -51,6 +51,7 @@ def personnel_client() -> Generator[tuple[TestClient, Session, dict[str, str]], 
         tables=[
             UserAccount.__table__,
             LoginSession.__table__,
+            LoginFailureBucket.__table__,
             Enterprise.__table__,
             OrganizationUnitType.__table__,
             OrganizationUnit.__table__,

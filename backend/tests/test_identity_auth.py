@@ -13,7 +13,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from app.database import get_db
-from app.identity.models import LoginSession, UserAccount
+from app.identity.models import LoginFailureBucket, LoginSession, UserAccount
+from app.identity.rate_limit import PAIR_LIMIT, SOURCE_LIMIT
 from app.identity.security import hash_password, hash_session_token, verify_password
 from app.main import app
 
@@ -27,6 +28,7 @@ def identity_client() -> Generator[tuple[TestClient, Session], None, None]:
     )
     UserAccount.__table__.create(engine)
     LoginSession.__table__.create(engine)
+    LoginFailureBucket.__table__.create(engine)
     db = Session(engine, expire_on_commit=False)
     db.add(
         UserAccount(
@@ -183,3 +185,114 @@ def test_expired_session_and_inactive_user_are_rejected(
     db.commit()
     db.expire_all()
     assert client.get("/api/v1/auth/me").status_code == 401
+
+
+def test_bad_password_and_unknown_user_have_same_public_error(
+    identity_client: tuple[TestClient, Session],
+) -> None:
+    client, _ = identity_client
+    known = client.post("/api/v1/auth/login", json={
+        "username": "root-admin", "password": "incorrect",
+    })
+    unknown = client.post("/api/v1/auth/login", json={
+        "username": "does-not-exist", "password": "incorrect",
+    })
+    assert known.status_code == unknown.status_code == 401
+    assert known.json() == unknown.json() == {"detail": "Invalid credentials"}
+    assert "root-admin" not in known.text
+    assert "does-not-exist" not in unknown.text
+
+
+def test_login_failure_budget_and_retry_after(
+    identity_client: tuple[TestClient, Session],
+) -> None:
+    client, db = identity_client
+    for _ in range(PAIR_LIMIT):
+        failed = client.post("/api/v1/auth/login", json={
+            "username": "root-admin", "password": "wrong",
+        })
+        assert failed.status_code == 401
+    blocked = client.post("/api/v1/auth/login", json={
+        "username": "root-admin", "password": "excellent-local-password",
+    })
+    assert blocked.status_code == 429
+    assert int(blocked.headers["retry-after"]) >= 1
+    assert "root-admin" not in blocked.text
+    assert db.scalar(select(LoginSession.id)) is None
+
+
+def test_valid_login_resets_account_budget_but_not_source_history(
+    identity_client: tuple[TestClient, Session],
+) -> None:
+    client, db = identity_client
+    for _ in range(PAIR_LIMIT - 1):
+        assert client.post("/api/v1/auth/login", json={
+            "username": "root-admin", "password": "wrong",
+        }).status_code == 401
+    assert login_admin(client)
+    assert client.post("/api/v1/auth/login", json={
+        "username": "root-admin", "password": "wrong",
+    }).status_code == 401
+    # The source-wide counter retains the earlier failures.
+    assert db.scalar(select(LoginFailureBucket.failure_count).where(
+        LoginFailureBucket.failure_count == PAIR_LIMIT
+    )) == PAIR_LIMIT
+
+
+def test_forwarded_headers_cannot_reset_login_budget(
+    identity_client: tuple[TestClient, Session],
+) -> None:
+    client, _ = identity_client
+    for number in range(PAIR_LIMIT):
+        response = client.post("/api/v1/auth/login", headers={
+            "X-Forwarded-For": f"203.0.113.{number + 1}",
+        }, json={"username": "root-admin", "password": "wrong"})
+        assert response.status_code == 401
+    assert client.post("/api/v1/auth/login", headers={
+        "X-Forwarded-For": "198.51.100.17",
+    }, json={"username": "root-admin", "password": "excellent-local-password"}
+    ).status_code == 429
+
+
+def test_invalid_origin_does_not_consume_budget(
+    identity_client: tuple[TestClient, Session],
+) -> None:
+    client, db = identity_client
+    rejected = client.post("/api/v1/auth/login", headers={
+        "Origin": "https://hostile.invalid",
+    }, json={"username": "root-admin", "password": "wrong"})
+    assert rejected.status_code == 403
+    assert db.scalar(select(LoginFailureBucket.bucket_key)) is None
+
+
+def test_cross_origin_and_fetch_metadata_block_mutations(
+    identity_client: tuple[TestClient, Session],
+) -> None:
+    client, db = identity_client
+    csrf = login_admin(client)
+    payload = {"username": "blocked-user", "password": "sufficient-password"}
+    forbidden_origin = client.post("/api/v1/auth/users", headers={
+        "X-CSRF-Token": csrf, "Origin": "https://hostile.invalid",
+    }, json=payload)
+    assert forbidden_origin.status_code == 403
+    forbidden_fetch = client.post("/api/v1/auth/users", headers={
+        "X-CSRF-Token": csrf, "Sec-Fetch-Site": "cross-site",
+    }, json=payload)
+    assert forbidden_fetch.status_code == 403
+    assert db.scalar(select(UserAccount).where(UserAccount.username == "blocked-user")) is None
+    assert client.post("/api/v1/auth/users", headers={
+        "X-CSRF-Token": csrf, "Origin": "http://localhost:5173",
+    }, json=payload).status_code == 201
+
+
+def test_source_budget_blocks_password_spraying(
+    identity_client: tuple[TestClient, Session],
+) -> None:
+    client, _ = identity_client
+    for number in range(SOURCE_LIMIT):
+        assert client.post("/api/v1/auth/login", json={
+            "username": f"unknown-{number}", "password": "incorrect",
+        }).status_code == 401
+    assert client.post("/api/v1/auth/login", json={
+        "username": "root-admin", "password": "excellent-local-password",
+    }).status_code == 429

@@ -6,7 +6,9 @@ from datetime import datetime, timezone
 
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
-from fastapi import Cookie, Depends, Header, HTTPException, status
+from fastapi import Cookie, Depends, Header, HTTPException, Request, status
+
+from app.config import settings
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -80,8 +82,16 @@ def require_admin(
 
 
 def require_csrf(
+    request: Request,
     record: LoginSession = Depends(get_authenticated_session),  # noqa: B008
     csrf_header: str | None = Header(default=None, alias="X-CSRF-Token"),
 ) -> None:
     if not csrf_header or not secrets.compare_digest(record.csrf_token, csrf_header):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="CSRF validation failed")
+    origin = request.headers.get("origin")
+    if origin is not None and origin not in settings.cors_origins:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Origin not allowed")
+    if request.headers.get("sec-fetch-site", "").lower() == "cross-site":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Cross-site mutation denied"
+        )
