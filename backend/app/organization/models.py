@@ -124,7 +124,12 @@ class UserUnitPermission(Base):
             "user_id", "unit_id", "code", name="uq_user_unit_permission_grant"
         ),
         CheckConstraint(
-            "code IN ('equipment.policy.read', 'equipment.policy.propose', 'equipment.policy.review', 'competence.assessment.review', 'credentials.record.review', 'work.order.create', 'work.order.assign', 'work.crew.manage', 'work.order.priority', 'work.order.start', 'work.order.complete', 'work.order.cancel', 'work.order.revalidate', 'work.order.hold', 'work.order.resume')",
+            "code IN ('equipment.policy.read', 'equipment.policy.propose', "
+            "'equipment.policy.review', 'competence.assessment.review', "
+            "'credentials.record.review', 'work.order.create', 'work.order.assign', "
+            "'work.crew.manage', 'work.order.priority', 'work.order.start', "
+            "'work.order.complete', 'work.order.cancel', 'work.order.revalidate', "
+            "'work.order.hold', 'work.order.resume')"
             name="ck_unit_permission_code",
         ),
     )

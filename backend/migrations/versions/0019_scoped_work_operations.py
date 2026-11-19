@@ -14,8 +14,19 @@ down_revision: Union[str, None] = "0018_login_failure_buckets"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-BEFORE = "code IN ('equipment.policy.read', 'equipment.policy.propose', 'equipment.policy.review', 'competence.assessment.review', 'credentials.record.review')"
-AFTER = "code IN ('equipment.policy.read', 'equipment.policy.propose', 'equipment.policy.review', 'competence.assessment.review', 'credentials.record.review', 'work.order.create', 'work.order.assign', 'work.crew.manage', 'work.order.priority', 'work.order.start', 'work.order.complete', 'work.order.cancel', 'work.order.revalidate', 'work.order.hold', 'work.order.resume')"
+BEFORE = (
+    "code IN ('equipment.policy.read', 'equipment.policy.propose', "
+    "'equipment.policy.review', 'competence.assessment.review', "
+    "'credentials.record.review')"
+)
+AFTER = (
+    "code IN ('equipment.policy.read', 'equipment.policy.propose', "
+    "'equipment.policy.review', 'competence.assessment.review', "
+    "'credentials.record.review', 'work.order.create', 'work.order.assign', "
+    "'work.crew.manage', 'work.order.priority', 'work.order.start', "
+    "'work.order.complete', 'work.order.cancel', 'work.order.revalidate', "
+    "'work.order.hold', 'work.order.resume')"
+)
 
 
 def upgrade() -> None:
