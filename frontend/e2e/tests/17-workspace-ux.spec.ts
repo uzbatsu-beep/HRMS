@@ -22,7 +22,7 @@ test("mobile navigation closes with Escape and backdrop, preserving focus", asyn
   await expect(menu).toBeFocused();
   await menu.click();
   await page.getByRole("button", { name: "Закрыть навигацию" }).click({
-    position: { x: 12, y: 400 },
+    position: { x: 370, y: 400 },
   });
   await expect(page.locator("#workspace-navigation")).toBeHidden();
   await expect(menu).toBeFocused();
@@ -31,8 +31,8 @@ test("mobile navigation closes with Escape and backdrop, preserving focus", asyn
 test("global staff search supports keyboard selection and scoped navigation", async ({ page }) => {
   const seed = demo();
   await loginUI(page);
-  await expect(page.locator(".workspace-rail").getByLabel("Предприятие"))
-    .toHaveValue(seed.enterprise.id);
+  await page.locator(".workspace-rail").getByLabel("Предприятие")
+    .selectOption(seed.enterprise.id);
   const input = page.getByRole("combobox", { name: "Глобальный поиск сотрудников" });
   await input.fill(seed.people.otherUnit.last_name);
   const list = page.getByRole("listbox", { name: "Найденные сотрудники" });

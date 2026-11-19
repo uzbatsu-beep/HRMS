@@ -1128,6 +1128,10 @@ h2 { margin: 6px 0 0; font-size: 18px; letter-spacing: -.025em; }
     display: block; position: fixed; inset: 0; z-index: 29;
     background: rgba(24, 43, 35, .3); border: 0; cursor: default;
   }
+  /* Keep an operable outside-click area next to the mobile navigation drawer. */
+  .workspace-navigation.open {
+    right: auto; width: min(340px, calc(100vw - 38px));
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .workspace *, .workspace *::before, .workspace *::after {
