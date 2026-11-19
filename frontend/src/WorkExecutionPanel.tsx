@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { WorkCapabilities } from "./WorkPermissions";
 
 type Priority = "routine" | "normal" | "urgent" | "critical";
 type Status = "open" | "assigned" | "in_progress" | "on_hold" | "completed" | "cancelled";
@@ -75,10 +76,10 @@ async function api<T>(path: string, init: RequestInit = {}, csrf?: string): Prom
 }
 
 export default function WorkExecutionPanel({
-  order, csrfToken, canDispatch, onChanged,
+  order, csrfToken, capabilities, onChanged,
 }: {
   order: Order; csrfToken: string | undefined;
-  canDispatch: boolean; onChanged: () => void;
+  capabilities: WorkCapabilities | null; onChanged: () => void;
 }) {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [checked, setChecked] = useState<SafetyResult | null>(null);
@@ -94,6 +95,7 @@ export default function WorkExecutionPanel({
   const assigned = order.status === "assigned";
   const running = order.status === "in_progress";
   const onHold = order.status === "on_hold";
+  const can = (name: keyof WorkCapabilities) => Boolean(capabilities?.[name]);
 
   useEffect(() => {
     // Preserve the just-returned safety report when the parent reloads after
@@ -118,7 +120,9 @@ export default function WorkExecutionPanel({
     order.assignment?.person_id]);
 
   async function action(path: string, payload?: unknown, message?: string) {
-    if (!canDispatch || !csrfToken) return;
+    const right: keyof WorkCapabilities = path === "priority" ? "priority"
+      : path === "hold" ? "hold" : path === "resume" ? "resume" : "crew";
+    if (!can(right) || !csrfToken) return;
     setBusy(true); setError(""); setSuccess("");
     try {
       await api<unknown>(`${API}/orders/${order.id}/${path}`, {
@@ -141,7 +145,7 @@ export default function WorkExecutionPanel({
   }
 
   async function revalidate() {
-    if (!csrfToken || !canDispatch) return;
+    if (!csrfToken || !can("revalidate")) return;
     setBusy(true); setError(""); setChecked(null);
     try {
       const result = await api<SafetyResult>(
@@ -171,7 +175,7 @@ export default function WorkExecutionPanel({
         )}
       </div>
 
-      {canDispatch && ["open", "assigned"].includes(order.status) && (
+      {can("priority") && ["open", "assigned"].includes(order.status) && (
         <details className="wm-execution-detail">
           <summary>Изменить приоритет</summary>
           <div className="wm-crew-editor">
@@ -206,7 +210,7 @@ export default function WorkExecutionPanel({
               <strong>{roleNames[member.role] ?? member.role}
                 {member.removed_at ? " · удалён" : ""}</strong>
               <span>{member.person_id}</span>
-              {assigned && canDispatch && !member.removed_at && (
+              {assigned && can("crew") && !member.removed_at && (
                 <button className="wm-button secondary" type="button" disabled={busy ||
                   note.trim().length < 10}
                   onClick={() => void action(`crew/${member.id}/remove`, {
@@ -222,7 +226,7 @@ export default function WorkExecutionPanel({
           )}
         </div>
       )}
-      {assigned && canDispatch && (
+      {assigned && can("crew") && (
         <div className="wm-execution-detail">
           <h4>Сформировать бригаду / заменить ответственного</h4>
           <div className="wm-crew-editor">
@@ -274,7 +278,7 @@ export default function WorkExecutionPanel({
           <div className="wm-actions">
             <button type="button" className="wm-button secondary" disabled={busy}
               onClick={readSafety}>Проверить (без изменения статуса)</button>
-            {canDispatch && (
+            {can("revalidate") && (
               <button type="button" className="wm-button" disabled={busy}
                 onClick={() => void revalidate()}>
                 Зафиксировать повторную проверку
@@ -307,7 +311,7 @@ export default function WorkExecutionPanel({
           )}
         </div>
       )}
-      {(running || onHold) && canDispatch && (
+      {((running && can("hold")) || (onHold && can("resume"))) && (
         <div className="wm-execution-detail">
           <h4>{onHold ? "Работа требует разрешения ответственного лица" :
             "Ручная приостановка выполнения"}</h4>

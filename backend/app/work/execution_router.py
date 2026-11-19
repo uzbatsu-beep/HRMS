@@ -13,11 +13,12 @@ from app.database import get_db
 from app.identity.models import UserAccount
 from app.identity.security import get_current_user, require_csrf
 from app.organization.access import allowed_unit_ids
+from app.organization.models import OrganizationUnit
 from app.personnel.models import Person
 from app.personnel.service import require_visible_person
 from app.work import execution, service as work_service
 from app.work.models import WorkCrewMember, WorkOrder, WorkOrderAssignment
-from app.work.router import read_order, require_dispatcher
+from app.work.router import read_order, require_work_actor, require_work_unit
 from app.work.schemas import (
     CrewCreate, LeadReplacement, PriorityChange, ReasonNote,
     SafetyCheck, WorkView,
@@ -27,9 +28,9 @@ router = APIRouter(prefix=f"{settings.api_v1_prefix}/work", tags=["work executio
 
 
 def dispatch_locked(
-    db: Session, user: UserAccount, order_id: UUID,
+    db: Session, user: UserAccount, order_id: UUID, operation: str,
 ) -> WorkOrder:
-    require_dispatcher(user)
+    require_work_actor(db, user, operation)
     order = read_order(db, user, order_id)
     work_service.lock_enterprise(db, order.enterprise_id)
     db.refresh(order, with_for_update=True)
@@ -37,6 +38,7 @@ def dispatch_locked(
         db, user, order.enterprise_id
     ):
         raise HTTPException(status_code=404, detail="Work order not found")
+    require_work_unit(db, user, db.get(OrganizationUnit, order.unit_id), operation)
     return order
 
 
@@ -94,7 +96,7 @@ def add_crew_member(
     user: UserAccount = Depends(get_current_user),  # noqa: B008
     db: Session = Depends(get_db),  # noqa: B008
 ) -> WorkView:
-    order = dispatch_locked(db, user, order_id)
+    order = dispatch_locked(db, user, order_id, "work.crew.manage")
     require_assigned(order)
     leader = db.scalar(select(WorkOrderAssignment).where(
         WorkOrderAssignment.work_order_id == order.id
@@ -142,7 +144,7 @@ def remove_crew_member(
     user: UserAccount = Depends(get_current_user),  # noqa: B008
     db: Session = Depends(get_db),  # noqa: B008
 ) -> WorkView:
-    order = dispatch_locked(db, user, order_id)
+    order = dispatch_locked(db, user, order_id, "work.crew.manage")
     require_assigned(order)
     member = db.get(WorkCrewMember, member_id)
     if (
@@ -175,7 +177,7 @@ def replace_lead(
     user: UserAccount = Depends(get_current_user),  # noqa: B008
     db: Session = Depends(get_db),  # noqa: B008
 ) -> WorkView:
-    order = dispatch_locked(db, user, order_id)
+    order = dispatch_locked(db, user, order_id, "work.crew.manage")
     require_assigned(order)
     leader = db.scalar(select(WorkOrderAssignment).where(
         WorkOrderAssignment.work_order_id == order.id
@@ -225,7 +227,7 @@ def change_priority(
     user: UserAccount = Depends(get_current_user),  # noqa: B008
     db: Session = Depends(get_db),  # noqa: B008
 ) -> WorkView:
-    order = dispatch_locked(db, user, order_id)
+    order = dispatch_locked(db, user, order_id, "work.order.priority")
     if order.status not in {"open", "assigned"}:
         raise HTTPException(status_code=409, detail="Priority locked after work starts")
     if order.priority == payload.priority:
@@ -267,7 +269,7 @@ def revalidate_work(
     user: UserAccount = Depends(get_current_user),  # noqa: B008
     db: Session = Depends(get_db),  # noqa: B008
 ) -> SafetyCheck:
-    order = dispatch_locked(db, user, order_id)
+    order = dispatch_locked(db, user, order_id, "work.order.revalidate")
     if order.status not in {"assigned", "in_progress", "on_hold"}:
         raise HTTPException(status_code=409, detail="Work not available for a safety recheck")
     check = execution.team_safety_check(db, order)
@@ -299,7 +301,7 @@ def manual_hold(
     user: UserAccount = Depends(get_current_user),  # noqa: B008
     db: Session = Depends(get_db),  # noqa: B008
 ) -> WorkView:
-    order = dispatch_locked(db, user, order_id)
+    order = dispatch_locked(db, user, order_id, "work.order.hold")
     if order.status != "in_progress":
         raise HTTPException(status_code=409, detail="Only active work can be put on hold")
     checked = execution.team_safety_check(db, order)
@@ -321,7 +323,7 @@ def resume_work(
     user: UserAccount = Depends(get_current_user),  # noqa: B008
     db: Session = Depends(get_db),  # noqa: B008
 ) -> WorkView:
-    order = dispatch_locked(db, user, order_id)
+    order = dispatch_locked(db, user, order_id, "work.order.resume")
     if order.status != "on_hold":
         raise HTTPException(status_code=409, detail="Work is not on hold")
     now = as_utc(work_service.utcnow())

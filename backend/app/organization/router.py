@@ -13,6 +13,7 @@ from app.database import get_db
 from app.identity.models import UserAccount
 from app.identity.security import get_current_user, require_admin, require_csrf
 from app.organization.access import allowed_unit_ids, can_read_enterprise
+from app.organization.permissions import WORK_TEMPLATES
 from app.organization.models import (
     Enterprise,
     OrganizationAuditEvent,
@@ -26,6 +27,7 @@ from app.organization.schemas import (
     EnterpriseView,
     ScopeGrantCreate,
     ScopeView, PermissionGrantCreate, PermissionGrantView,
+    PermissionTemplateApply, PermissionTemplateApplyResult, PermissionTemplateView,
     UnitCreate,
     UnitTypeCreate,
     UnitTypeView,
@@ -391,6 +393,66 @@ def revoke_scope(
     commit_or_conflict(db)
 
 
+
+
+
+
+@router.get("/permission-templates", response_model=list[PermissionTemplateView])
+def list_permission_templates(
+    _admin: UserAccount = Depends(require_admin),  # noqa: B008
+) -> list[PermissionTemplateView]:
+    return [
+        PermissionTemplateView(code=code, label=label, permissions=list(codes))
+        for code, (label, codes) in WORK_TEMPLATES.items()
+    ]
+
+
+@router.post(
+    "/permission-templates/apply", response_model=PermissionTemplateApplyResult,
+    dependencies=[Depends(require_csrf)],
+)
+def apply_permission_template(
+    payload: PermissionTemplateApply,
+    admin: UserAccount = Depends(require_admin),  # noqa: B008
+    db: Session = Depends(get_db),  # noqa: B008
+) -> PermissionTemplateApplyResult:
+    """Apply a named immutable template atomically without implicit org scope."""
+    user = db.get(UserAccount, payload.user_id)
+    unit = db.get(OrganizationUnit, payload.unit_id)
+    if user is None or not user.is_active or user.role == "admin":
+        raise HTTPException(status_code=422, detail="Target must be an active non-admin")
+    if unit is None:
+        raise HTTPException(status_code=422, detail="Organization unit not found")
+    lock_enterprise(db, unit.enterprise_id)
+    _label, codes = WORK_TEMPLATES[payload.template]
+    granted_codes: list[str] = []
+    for code in codes:
+        existing = db.scalar(select(UserUnitPermission.id).where(
+            UserUnitPermission.user_id == user.id,
+            UserUnitPermission.unit_id == unit.id,
+            UserUnitPermission.code == code,
+        ))
+        if existing is not None:
+            continue
+        grant = UserUnitPermission(
+            user_id=user.id, unit_id=unit.id, code=code, granted_by=admin.id,
+        )
+        db.add(grant)
+        flush_or_conflict(db)
+        audit(db, admin, unit.enterprise_id, "permission.granted", grant.id, {
+            "user_id": str(user.id), "unit_id": str(unit.id),
+            "code": code, "template": payload.template,
+        })
+        granted_codes.append(code)
+    if granted_codes:
+        audit(db, admin, unit.enterprise_id, "permission.template_applied", user.id, {
+            "unit_id": str(unit.id), "template": payload.template,
+            "granted_codes": granted_codes,
+        })
+        commit_or_conflict(db)
+    return PermissionTemplateApplyResult(
+        **payload.model_dump(), granted_codes=granted_codes,
+    )
 
 
 @router.get("/permissions", response_model=list[PermissionGrantView])

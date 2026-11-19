@@ -21,6 +21,16 @@ PERMISSION_CODES = (
     "equipment.policy.review",
     "competence.assessment.review",
     "credentials.record.review",
+    "work.order.create",
+    "work.order.assign",
+    "work.crew.manage",
+    "work.order.priority",
+    "work.order.start",
+    "work.order.complete",
+    "work.order.cancel",
+    "work.order.revalidate",
+    "work.order.hold",
+    "work.order.resume",
 )
 
 
@@ -77,3 +87,60 @@ def can_review_person(
         return False
     unit = db.get(OrganizationUnit, assignment.unit_id)
     return bool(unit and can(db, user, unit, code))
+
+
+# Built-in templates grant individual exact-unit operations; never org visibility.
+WORK_TEMPLATES: dict[str, tuple[str, tuple[str, ...]]] = {
+    "work.planner": (
+        "Планировщик работ",
+        ("work.order.create", "work.order.priority"),
+    ),
+    "work.dispatcher": (
+        "Диспетчер бригад",
+        ("work.order.assign", "work.crew.manage", "work.order.priority"),
+    ),
+    "work.supervisor": (
+        "Ответственный за выполнение",
+        (
+            "work.order.start", "work.order.complete", "work.order.cancel",
+            "work.order.revalidate", "work.order.hold", "work.order.resume",
+        ),
+    ),
+    "work.coordinator": (
+        "Координатор работ",
+        tuple(code for code in PERMISSION_CODES if code.startswith("work.")),
+    ),
+}
+
+WORK_CAPABILITY_CODES: dict[str, str] = {
+    "create": "work.order.create",
+    "assign": "work.order.assign",
+    "crew": "work.crew.manage",
+    "priority": "work.order.priority",
+    "start": "work.order.start",
+    "complete": "work.order.complete",
+    "cancel": "work.order.cancel",
+    "revalidate": "work.order.revalidate",
+    "hold": "work.order.hold",
+    "resume": "work.order.resume",
+}
+
+
+def can_work(db: Session, user: UserAccount, unit: OrganizationUnit, code: str) -> bool:
+    """Preserve legacy admin/manager rights; delegate exact-unit rights to viewer."""
+    if code not in WORK_CAPABILITY_CODES.values() or not user.is_active:
+        return False
+    if user.role == "admin":
+        return True
+    if unit.id not in allowed_unit_ids(db, user, unit.enterprise_id):
+        return False
+    if user.role == "manager":
+        return True
+    return can(db, user, unit, code)
+
+
+def work_capabilities(
+    db: Session, user: UserAccount, unit: OrganizationUnit,
+) -> dict[str, bool]:
+    return {field: can_work(db, user, unit, code)
+            for field, code in WORK_CAPABILITY_CODES.items()}

@@ -87,6 +87,16 @@ class PermissionGrantCreate(BaseModel):
         "equipment.policy.review",
         "competence.assessment.review",
         "credentials.record.review",
+        "work.order.create",
+        "work.order.assign",
+        "work.crew.manage",
+        "work.order.priority",
+        "work.order.start",
+        "work.order.complete",
+        "work.order.cancel",
+        "work.order.revalidate",
+        "work.order.hold",
+        "work.order.resume",
     ]
 
 
@@ -95,3 +105,19 @@ class PermissionGrantView(PermissionGrantCreate):
     id: UUID
     granted_by: UUID
     created_at: datetime
+
+
+class PermissionTemplateApply(BaseModel):
+    user_id: UUID
+    unit_id: UUID
+    template: Literal["work.planner", "work.dispatcher", "work.supervisor", "work.coordinator"]
+
+
+class PermissionTemplateView(BaseModel):
+    code: str
+    label: str
+    permissions: list[str]
+
+
+class PermissionTemplateApplyResult(PermissionTemplateApply):
+    granted_codes: list[str]
