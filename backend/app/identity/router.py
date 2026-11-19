@@ -50,7 +50,9 @@ def login(
     normalized = normalize_username(payload.username)
     require_login_budget(db, request, normalized)
     user = db.scalar(select(UserAccount).where(UserAccount.username == normalized))
-    candidate_hash = user.password_hash if user is not None and user.is_active else DUMMY_PASSWORD_HASH
+    candidate_hash = (
+        user.password_hash if user is not None and user.is_active else DUMMY_PASSWORD_HASH
+    )
     valid_password = verify_password(payload.password, candidate_hash)
     if user is None or not user.is_active or not valid_password:
         record_failed_login(db, request, normalized)

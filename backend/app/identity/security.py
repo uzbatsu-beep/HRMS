@@ -92,4 +92,6 @@ def require_csrf(
     if origin is not None and origin not in settings.cors_origins:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Origin not allowed")
     if request.headers.get("sec-fetch-site", "").lower() == "cross-site":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cross-site mutation denied")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Cross-site mutation denied"
+        )
