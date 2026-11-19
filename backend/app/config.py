@@ -1,6 +1,7 @@
 
 from functools import lru_cache
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -21,6 +22,19 @@ class Settings(BaseSettings):
         "postgresql+psycopg://twm:change-me-for-local-development@localhost:5432/twm"
     )
     cors_allowed_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    auth_throttle_hmac_key: str = "development-only-throttle-key"
+
+    @model_validator(mode="after")
+    def require_production_throttle_secret(self) -> "Settings":
+        if self.app_env not in {"development", "test"} and (
+            len(self.auth_throttle_hmac_key) < 32
+            or self.auth_throttle_hmac_key == "development-only-throttle-key"
+        ):
+            raise ValueError(
+                "TWM_AUTH_THROTTLE_HMAC_KEY: independent random secret of at least "
+                "32 characters required outside development/test"
+            )
+        return self
 
     @property
     def cors_origins(self) -> list[str]:
