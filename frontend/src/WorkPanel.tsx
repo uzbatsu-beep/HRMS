@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useWorkspace } from "./WorkspaceContext";
 import WorkExecutionPanel from "./WorkExecutionPanel";
+import type { WorkCapabilities } from "./WorkPermissions";
 import WorkEquipmentPermitPanel from "./WorkEquipmentPermitPanel";
 
 type User = { id: string; username: string; role: "admin" | "manager" | "viewer" };
@@ -115,6 +116,8 @@ export default function WorkPanel() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [unitCaps, setUnitCaps] = useState<{ key: string; data: WorkCapabilities } | null>(null);
+  const [orderCaps, setOrderCaps] = useState<{ key: string; data: WorkCapabilities } | null>(null);
 
   const [code, setCode] = useState("");
   const [title, setTitle] = useState("");
@@ -130,6 +133,10 @@ export default function WorkPanel() {
 
   const dispatcher = session?.user.role === "admin" || session?.user.role === "manager";
   const selectedOrder = orders.find((work) => work.id === selectedOrderId);
+  const unitKey = [session?.user.id, enterpriseId, unitId].join(":");
+  const orderKey = [session?.user.id, selectedOrderId].join(":");
+  const canCreate = unitCaps?.key === unitKey && unitCaps.data.create;
+  const workCaps = orderCaps?.key === orderKey ? orderCaps.data : null;
   const activeSkills = useMemo(() => skills.filter((s) => s.is_active), [skills]);
   const activityCodes = useMemo(
     () => [...new Set(requirements.map((r) => r.activity_code))].sort(),
@@ -236,6 +243,29 @@ export default function WorkPanel() {
     return () => { active = false; };
   }, [selectedOrderId, selectedOrder?.status, session?.user.id, revision]);
 
+
+  useEffect(() => {
+    setUnitCaps(null);
+    if (!session || !enterpriseId || !unitId) return;
+    let active = true;
+    api<WorkCapabilities>(
+      `${base}/enterprises/${enterpriseId}/units/${unitId}/capabilities`,
+    ).then((data) => {
+      if (active) setUnitCaps({ key: unitKey, data });
+    }).catch(() => { if (active) setUnitCaps(null); });
+    return () => { active = false; };
+  }, [session?.user.id, enterpriseId, unitId, revision, unitKey]);
+
+  useEffect(() => {
+    setOrderCaps(null);
+    if (!session || !selectedOrderId) return;
+    let active = true;
+    api<WorkCapabilities>(`${base}/orders/${selectedOrderId}/capabilities`)
+      .then((data) => { if (active) setOrderCaps({ key: orderKey, data }); })
+      .catch(() => { if (active) setOrderCaps(null); });
+    return () => { active = false; };
+  }, [session?.user.id, selectedOrderId, revision, orderKey]);
+
   async function change(action: () => Promise<unknown>, success: string) {
     setBusy(true); setError(""); setNotice("");
     try {
@@ -327,7 +357,7 @@ export default function WorkPanel() {
               <small>Выполняется</small></article>
           </div>
 
-          {dispatcher && enterpriseId && (
+          {canCreate && enterpriseId && (
             <details className="wm-editor">
               <summary>Создать технический наряд</summary>
               <form className="wm-form" onSubmit={create}>
@@ -475,17 +505,18 @@ export default function WorkPanel() {
                     Ответственный: {selectedOrder.assignment.person_id} ·
                     бронь {selectedOrder.assignment.reservation_id.slice(0, 8)}
                   </p>}
-                  {dispatcher && (
+                  {workCaps && (workCaps.start || workCaps.complete || workCaps.cancel) && (
                     <div className="wm-actions">
-                      {selectedOrder.status === "assigned" && (
+                      {workCaps.start && selectedOrder.status === "assigned" && (
                         <button type="button" className="wm-button" disabled={busy}
                           onClick={() => action(selectedOrder.id, "start")}>Начать с повторной проверкой</button>
                       )}
-                      {selectedOrder.status === "in_progress" && (
+                      {workCaps.complete && selectedOrder.status === "in_progress" && (
                         <button type="button" className="wm-button" disabled={busy}
                           onClick={() => action(selectedOrder.id, "complete")}>Отметить выполненным</button>
                       )}
-                      {["open", "assigned", "in_progress", "on_hold"].includes(selectedOrder.status) && (
+                      {workCaps.cancel && ["open", "assigned", "in_progress", "on_hold"]
+                        .includes(selectedOrder.status) && (
                         <button type="button" className="wm-button danger" disabled={busy}
                           onClick={() => action(selectedOrder.id, "cancel")}>Отменить наряд</button>
                       )}
@@ -517,7 +548,7 @@ export default function WorkPanel() {
               key={selectedOrder.id}
               order={selectedOrder}
               csrfToken={session.csrf_token}
-              canDispatch={dispatcher}
+              capabilities={workCaps}
               onChanged={() => setRevision((old) => old + 1)}
             />
           )}
@@ -553,7 +584,7 @@ export default function WorkPanel() {
                         ))}
                       </div>
                     )}
-                    {dispatcher && candidate.eligible && (
+                    {workCaps?.assign && candidate.eligible && (
                       <button type="button" className="wm-button"
                         disabled={busy} onClick={() => action(
                           selectedOrder.id, "assign", candidate.person_id,
