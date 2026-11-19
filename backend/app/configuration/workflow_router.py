@@ -322,6 +322,7 @@ def create_service_case(
     db.add(WorkflowCaseEvent(
         enterprise_id=enterprise_id, case_id=row.id, from_state=None,
         to_state=row.state, transition_code="created", actor_id=user.id, note="",
+        created_at=datetime.now(timezone.utc),
     ))
     audit(db, user, enterprise_id, "workflow.case_created", row.id, {
         "template": version.code, "version": version.version,
@@ -445,7 +446,7 @@ def move_service_case(
         enterprise_id=row.enterprise_id, case_id=row.id,
         from_state=before, to_state=row.state,
         transition_code=transition.code, actor_id=user.id,
-        note=payload.note.strip(),
+        note=payload.note.strip(), created_at=datetime.now(timezone.utc),
     ))
     audit(db, user, row.enterprise_id, "workflow.case_transitioned", row.id, {
         "transition": transition.code, "from": before, "to": row.state,
