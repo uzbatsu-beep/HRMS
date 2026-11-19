@@ -57,19 +57,25 @@ def candidate_statement(
     if user.role != "admin":
         current_units = allowed_unit_ids(db, user, work.enterprise_id)
         today = date.today()
-        visible_now = exists(
-            select(EmploymentAssignment.id).where(
+        # Match current_assignment(): one CURRENT primary assignment, chosen
+        # by the latest effective_from. A corrupt historical overlap must not
+        # turn an old, accessible department into current visibility.
+        current_unit = (
+            select(EmploymentAssignment.unit_id)
+            .where(
                 EmploymentAssignment.resource_id == WorkforceResource.id,
                 EmploymentAssignment.enterprise_id == work.enterprise_id,
-                EmploymentAssignment.unit_id.in_(current_units),
                 EmploymentAssignment.effective_from <= today,
                 or_(
                     EmploymentAssignment.effective_to.is_(None),
                     EmploymentAssignment.effective_to >= today,
                 ),
             )
+            .order_by(EmploymentAssignment.effective_from.desc())
+            .limit(1)
+            .scalar_subquery()
         )
-        statement = statement.where(visible_now)
+        statement = statement.where(current_unit.in_(current_units))
     if search:
         pattern = _search_pattern(search)
         full_name = Person.last_name + " " + Person.first_name

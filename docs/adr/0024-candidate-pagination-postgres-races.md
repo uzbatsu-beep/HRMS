@@ -26,7 +26,10 @@ Response: `{ items: CandidateView[], next_cursor: UUID | null, has_more: boolean
 - The database filters enterprise, active Person and WorkforceResource,
   planned primary-unit membership and **current** organizational scope
   (for non-admins) **before** fetching each limited page. SQL EXISTS avoids
-  duplicated records due to joined historical employment rows.
+  duplicated records due to joined historical employment rows. Current
+  visibility uses the latest dated primary assignment (the same ordering as
+  `current_assignment()`), not `ANY` historically overlapping assignment.
+  This fails closed against a corrupt older in-scope employment row.
 - Assessments are generated **only** for people on the returned page. Every
   candidate displays a truthful `eligible` state and hard-gate blocker
   reasons. There is no misleading `eligible_only` filter after LIMIT.

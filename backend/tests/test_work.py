@@ -2895,15 +2895,19 @@ def test_keyset_candidates_reach_qualified_worker_beyond_first_hundred(
 
     later_person = None
     later_resource = None
+    same_name_ids: list[str] = []
     # Surnames intentionally come AFTER the two originally seeded entries.
     # All records are real, queryable ORM rows, not mocked API responses.
     for index in range(125):
         person = Person(
             enterprise_id=UUID(s["enterprise"]), employee_code=f"PAGE-{index:04}",
-            first_name="Candidate", last_name=f"Zed-{index:04}",
+            first_name="Candidate",
+            last_name="Zed-0017" if index == 18 else f"Zed-{index:04}",
         )
         db.add(person)
         db.flush()
+        if index in {17, 18}:
+            same_name_ids.append(str(person.id))
         resource = WorkforceResource(
             enterprise_id=UUID(s["enterprise"]), person_id=person.id,
         )
@@ -2954,6 +2958,9 @@ def test_keyset_candidates_reach_qualified_worker_beyond_first_hundred(
     ids = [item["person_id"] for item in all_items]
     assert len(ids) == len(set(ids)) == 127
     assert later_person in ids
+    # Identical surname/first-name values straddling a page boundary are
+    # ordered deterministically by the UUID tie-breaker, with no duplicates.
+    assert set(same_name_ids) <= set(ids)
     target_result = next(item for item in all_items if item["person_id"] == later_person)
     assert target_result["eligible"] is True
     assert len(all_items) > 100
@@ -3004,6 +3011,22 @@ def test_candidate_page_search_literal_limits_and_cursor_isolation(
     page = client.get(url, params={"limit": 5})
     assert page.status_code == 200
     assert s["foreign_person"] not in {r["person_id"] for r in page.json()["items"]}
+    foreign_resource = db.scalar(select(WorkforceResource).where(
+        WorkforceResource.person_id == UUID(s["foreign_person"]),
+    ))
+    assert foreign_resource is not None
+    # Deliberately corrupt historical overlap (not permitted via the API).
+    # The earlier in-scope assignment must NOT override the latest primary one.
+    db.add(EmploymentAssignment(
+        enterprise_id=UUID(s["enterprise"]), resource_id=foreign_resource.id,
+        unit_id=UUID(s["unit"]), effective_from=date(2019, 1, 1),
+    ))
+    db.commit()
+    after_overlap = client.get(url, params={"limit": 20})
+    assert after_overlap.status_code == 200
+    assert s["foreign_person"] not in {
+        r["person_id"] for r in after_overlap.json()["items"]
+    }
     foreign = client.get(
         f"{BASE}/orders/{work['id']}/candidates/{s['foreign_person']}"
     )
