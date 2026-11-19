@@ -366,6 +366,21 @@ def get_service_case(
 
 
 @router.get(
+    "/service-requests/{case_id}/definition", response_model=WorkflowVersionView,
+)
+def get_case_definition(
+    case_id: UUID,
+    user: UserAccount = Depends(get_current_user),  # noqa: B008
+    db: Session = Depends(get_db),  # noqa: B008
+) -> WorkflowVersionView:
+    row = visible_case(db, user, case_id)
+    version = db.get(WorkflowDefinitionVersion, row.definition_id)
+    if version is None:
+        raise HTTPException(status_code=404, detail="Workflow definition not found")
+    return view_version(version)
+
+
+@router.get(
     "/service-requests/{case_id}/history", response_model=list[WorkflowCaseEventView],
 )
 def get_case_history(
