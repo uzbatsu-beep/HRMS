@@ -375,13 +375,14 @@ export default function WorkflowConfiguratorV2() {
           <p key={field.code}>{field.label}: {String(selectedCase.values[field.code] ?? "—")}</p>
         ))}
         {allowedRoutes.length > 0 && <>
-          <label>Комментарий к решению
+          <label>Комментарий к решению (не менее 10 символов для независимого согласования)
             <input maxLength={400} value={reviewNote}
               onChange={(e) => setReviewNote(e.target.value)} />
           </label>
           <div className="config-actions">
             {allowedRoutes.map((route) => <button key={route.code}
-              type="button" disabled={working}
+              type="button"
+              disabled={working || (route.independent_review && reviewNote.trim().length < 10)}
               onClick={() => perform(route)}>{route.label}</button>)}
           </div>
         </>}

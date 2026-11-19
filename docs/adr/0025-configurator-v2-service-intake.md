@@ -82,7 +82,8 @@ publish workflow definitions under an enterprise-level row lock.
   fresh scope check, expected source-state match, existing transition in the
   case's immutable template, and exact executor role/creator rule.
 - An `independent_review` transition is refused if actor == case creator,
-  even when the creator is an administrator or manager.
+  even when the creator is an administrator or manager. A substantive review
+  note of at least 10 non-whitespace characters is mandatory.
 - Every successful transition creates an immutable event and a metadata-only
   ConfigurationAudit entry in the same transaction.
 - Stale transitions fail 409 rather than overwrite another operator's state.
