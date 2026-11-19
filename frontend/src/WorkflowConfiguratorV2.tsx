@@ -95,6 +95,11 @@ export default function WorkflowConfiguratorV2() {
     // Security boundary: reset all prior company/account selections immediately.
     setVersions([]); setActive([]); setCases([]);
     setSelectedVersionId(""); setSelectedCaseId(""); setPinned(null);
+    setTemplateCode("service_intake");
+    setTemplateTitle("Заявка технической службе");
+    setDocument(initialWorkflow());
+    setRequestTemplate(""); setRequestUnit(""); setRequestTitle("");
+    setRequestValues({}); setReviewNote("");
     setNotice(""); setError("");
   }, [enterpriseId, session?.user.id]);
 
@@ -111,8 +116,13 @@ export default function WorkflowConfiguratorV2() {
     ]).then(([published, requestList, all]) => {
       if (!live) return;
       setActive(published); setCases(requestList); setVersions(all);
-      setSelectedVersionId((old) =>
-        all.some((item) => item.id === old) ? old : all[0]?.id ?? "");
+      const picked = all.find((item) => item.id === selectedVersionId) ?? all[0];
+      setSelectedVersionId(picked?.id ?? "");
+      if (picked) {
+        setTemplateCode(picked.code);
+        setTemplateTitle(picked.title);
+        setDocument(picked.document);
+      }
       setSelectedCaseId((old) =>
         requestList.some((item) => item.id === old) ? old : requestList[0]?.id ?? "");
     }).catch((reason: unknown) => {
@@ -205,8 +215,8 @@ export default function WorkflowConfiguratorV2() {
     const values: Record<string, string | number | boolean> = {};
     for (const field of fields) {
       const v = requestValues[field.code];
-      if (field.kind === "boolean" && typeof v === "boolean") {
-        values[field.code] = v;
+      if (field.kind === "boolean" && (typeof v === "boolean" || field.required)) {
+        values[field.code] = v === true;
       } else if (field.kind === "integer" && v !== "" && v != null) {
         values[field.code] = Number(v);
       } else if (typeof v === "string" && v.trim()) {
