@@ -34,6 +34,7 @@ jobs:
     env:
       TWM_APP_ENV: test
       TWM_DATABASE_URL: postgresql+psycopg://twm:twm_test_password@localhost:5432/twm_test
+      TWM_PG_CONCURRENCY_TESTS: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@v7

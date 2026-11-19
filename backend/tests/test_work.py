@@ -98,10 +98,10 @@ def interval(start_hour: int = 9, end_hour: int = 10) -> tuple[str, str]:
     )
 
 
-def seed(client: TestClient) -> dict[str, str]:
+def seed(client: TestClient, enterprise_code: str = "workplant") -> dict[str, str]:
     enterprise = post(
         client, "/api/v1/org/enterprises",
-        {"code": "workplant", "name": "Technical works plant"},
+        {"code": enterprise_code, "name": "Technical works plant"},
     )["id"]
     unit_type = post(
         client, f"/api/v1/org/enterprises/{enterprise}/types",
@@ -3010,3 +3010,111 @@ def test_candidate_page_search_literal_limits_and_cursor_isolation(
     assert foreign.status_code == 404
     auth(client, "wm-viewer")
     assert client.get(url).status_code == 404
+
+
+def test_postgresql_parallel_assignment_has_no_double_bookings() -> None:
+    """Real PostgreSQL READ COMMITTED and separate sessions / HTTP clients.
+
+    This intentionally cannot run on SQLite's in-memory StaticPool. The CI
+    service is disposable; local runs must explicitly opt in with an isolated DB.
+    """
+    import os
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+    from uuid import uuid4
+
+    from app.database import SessionLocal, engine
+
+    if os.getenv("TWM_PG_CONCURRENCY_TESTS") != "1":
+        pytest.skip("Explicit PostgreSQL concurrency opt-in required")
+    if engine.dialect.name != "postgresql" or os.getenv("TWM_APP_ENV") != "test":
+        pytest.skip("Only isolated PostgreSQL test app environment is supported")
+
+    with SessionLocal() as setup:
+        for name, role in (
+            ("wm-admin", "admin"), ("wm-reviewer", "admin"),
+            ("wm-manager", "manager"), ("wm-viewer", "viewer"),
+        ):
+            if setup.scalar(select(UserAccount).where(UserAccount.username == name)):
+                continue
+            setup.add(UserAccount(
+                username=name, role=role, is_active=True,
+                password_hash=hash_password(PASSWORD),
+            ))
+        setup.commit()
+
+    def compete(order_id: str, person_id: str) -> list[int]:
+        barrier = Barrier(2)
+
+        def attempt() -> int:
+            # Each thread owns a separate authenticated HTTP client, cookie jar
+            # and SQLAlchemy request session. No shared SQLite connections.
+            with TestClient(app) as parallel_client:
+                headers = auth(parallel_client)
+                barrier.wait(timeout=20)
+                response = parallel_client.post(
+                    f"{BASE}/orders/{order_id}/assign",
+                    headers=headers, json={"person_id": person_id},
+                )
+                return response.status_code
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(attempt) for _ in range(2)]
+            return [f.result(timeout=60) for f in futures]
+
+    def compete_two_orders(first: str, second: str, person_id: str) -> list[int]:
+        barrier = Barrier(2)
+
+        def attempt(order_id: str) -> int:
+            with TestClient(app) as parallel_client:
+                headers = auth(parallel_client)
+                barrier.wait(timeout=20)
+                response = parallel_client.post(
+                    f"{BASE}/orders/{order_id}/assign",
+                    headers=headers, json={"person_id": person_id},
+                )
+                return response.status_code
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(attempt, order_id) for order_id in (first, second)]
+            return [f.result(timeout=60) for f in futures]
+
+    with TestClient(app) as client:
+        s = seed(client, enterprise_code="pg-" + uuid4().hex[:14])
+        verified_skills(client, s)
+        verified_permit(client, s)
+        first = create_work(client, s, "pg-same-work-order")
+        assert sorted(compete(first["id"], s["person"])) == [200, 409]
+
+        # A second pair of overlapping orders competes for a different worker
+        # so the first successful reservation does not affect this race.
+        second_person = {**s, "person": s["other_person"]}
+        verified_skills(client, second_person)
+        verified_permit(client, second_person)
+        a = create_work(client, s, "pg-overlap-one")
+        b = create_work(client, s, "pg-overlap-two")
+        assert sorted(compete_two_orders(
+            a["id"], b["id"], s["other_person"],
+        )) == [200, 409]
+
+        with SessionLocal() as verify:
+            for person in (s["person"], s["other_person"]):
+                resource = verify.scalar(select(WorkforceResource).where(
+                    WorkforceResource.person_id == UUID(person),
+                ))
+                assert resource is not None
+                active = verify.scalars(select(WorkReservation).where(
+                    WorkReservation.enterprise_id == UUID(s["enterprise"]),
+                    WorkReservation.resource_id == resource.id,
+                    WorkReservation.cancelled_at.is_(None),
+                )).all()
+                assert len(active) == 1
+            assigned = verify.scalars(select(WorkOrder).where(
+                WorkOrder.enterprise_id == UUID(s["enterprise"]),
+                WorkOrder.status == "assigned",
+            )).all()
+            assert len(assigned) == 2
+            linked = verify.scalars(select(WorkOrderAssignment).where(
+                WorkOrderAssignment.enterprise_id == UUID(s["enterprise"]),
+            )).all()
+            assert len(linked) == 2
