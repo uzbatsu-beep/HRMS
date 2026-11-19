@@ -123,6 +123,14 @@ class CandidateView(BaseModel):
     verified_credentials: list[UUID]
 
 
+class CandidatePage(BaseModel):
+    """Stable name/keyset page; no global eligibility order is implied."""
+
+    items: list[CandidateView]
+    next_cursor: UUID | None = None
+    has_more: bool
+
+
 class AssignmentCreate(BaseModel):
     person_id: UUID
 

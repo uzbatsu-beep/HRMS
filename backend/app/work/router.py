@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -16,12 +16,13 @@ from app.identity.security import get_current_user, require_admin, require_csrf
 from app.organization.access import allowed_unit_ids
 from app.organization.models import Enterprise, OrganizationUnit, UserUnitPermission
 from app.organization.permissions import can_work, work_capabilities
-from app.personnel.models import EmploymentAssignment, Person, WorkforceResource
+from app.personnel.models import Person
 from app.personnel.service import require_visible_person, visible_person
 from app.work import execution, service as work_service
+from app.work.candidate_query import page_candidates
 from app.work.models import WorkAuditEvent, WorkOrder, WorkOrderAssignment, WorkSkillRequirement
 from app.work.schemas import (
-    AssignmentCreate, CandidateView, WorkCreate, WorkAuditView, WorkView,
+    AssignmentCreate, CandidatePage, CandidateView, WorkCreate, WorkAuditView, WorkView,
 )
 
 router = APIRouter(prefix=f"{settings.api_v1_prefix}/work", tags=["work management"])
@@ -186,41 +187,28 @@ def get_work_order_capabilities(
     return work_capabilities(db, user, unit)
 
 
+@router.get("/orders/{order_id}/candidates-page", response_model=CandidatePage)
+def list_candidates_page(
+    order_id: UUID,
+    limit: int = Query(default=20, ge=1, le=100),  # noqa: B008
+    after: UUID | None = None,
+    search: str = Query(default="", max_length=100),  # noqa: B008
+    user: UserAccount = Depends(get_current_user),  # noqa: B008
+    db: Session = Depends(get_db),  # noqa: B008
+) -> CandidatePage:
+    """Keyset page ordered by surname, given name and UUID; query is scoped in SQL."""
+    return page_candidates(db, user, read_order(db, user, order_id), limit, after, search)
+
+
 @router.get("/orders/{order_id}/candidates", response_model=list[CandidateView])
 def list_candidates(
     order_id: UUID,
     user: UserAccount = Depends(get_current_user),  # noqa: B008
     db: Session = Depends(get_db),  # noqa: B008
 ) -> list[CandidateView]:
-    order = read_order(db, user, order_id)
-    if order.status not in {"open", "assigned"}:
-        return []
-    day = as_utc(order.starts_at).date()
-    # Only staffing resources currently in the work's target unit; never
-    # enumerate other departments or tenants.
-    people = db.scalars(
-        select(Person)
-        .join(WorkforceResource, WorkforceResource.person_id == Person.id)
-        .join(EmploymentAssignment, EmploymentAssignment.resource_id == WorkforceResource.id)
-        .where(
-            Person.enterprise_id == order.enterprise_id,
-            Person.archived_at.is_(None),
-            WorkforceResource.is_active.is_(True),
-            EmploymentAssignment.unit_id == order.unit_id,
-            EmploymentAssignment.effective_from <= day,
-            (
-                (EmploymentAssignment.effective_to.is_(None))
-                | (EmploymentAssignment.effective_to >= day)
-            ),
-        )
-        .order_by(Person.last_name, Person.first_name, Person.id)
-        .limit(100)
-    ).all()
-    if user.role != "admin":
-        # A future assignment must not reveal a currently out-of-scope Person.
-        people = [person for person in people if visible_person(db, user, person)]
-    result = [work_service.assess_candidate(db, order, person) for person in people]
-    return sorted(result, key=lambda item: (not item.eligible, item.full_name))
+    """Legacy first-page API retained for existing integrations; use candidates-page."""
+    page = page_candidates(db, user, read_order(db, user, order_id), 100)
+    return sorted(page.items, key=lambda item: (not item.eligible, item.full_name))
 
 
 @router.get("/orders/{order_id}/candidates/{person_id}", response_model=CandidateView)
