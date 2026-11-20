@@ -1,0 +1,3 @@
+FROM postgres:16-alpine
+RUN apk add --no-cache python3
+COPY postgres_dr.py /tools/postgres_dr.py

@@ -162,6 +162,10 @@ jobs:
           E2E_ADMIN_PASSWORD: ${{ env.E2E_ADMIN_PASSWORD }}
           E2E_ACTOR_PASSWORD: ${{ env.E2E_ACTOR_PASSWORD }}
         run: npm run test:e2e
+      - name: Bounded synthetic API readiness latency probe
+        working-directory: frontend
+        run: python ../ops/load_probe.py --requests 160 --concurrency 8 --p95-ms 1500
+
       - name: Upload screenshots, traces and HTML report
         if: always()
         uses: actions/upload-artifact@v4
@@ -173,3 +177,130 @@ jobs:
             frontend/playwright-report/
             frontend/test-results/
             backend-e2e.log
+
+  dr_drill:
+    name: PostgreSQL backup and isolated restore drill
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: twm_dr
+          POSTGRES_USER: twm_dr
+          POSTGRES_PASSWORD: disposable_dr_ci_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U twm_dr -d twm_dr"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Build PostgreSQL 16 recovery tool image
+        run: docker build -t twm-postgres-dr -f ops/Dockerfile.postgres-dr ops
+      - name: Create synthetic backup and verify isolated restore
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$RUNNER_TEMP/twm-dr"
+          printf '127.0.0.1:5432:*:twm_dr:disposable_dr_ci_password\n' > "$RUNNER_TEMP/twm-dr/pgpass"
+          chmod 600 "$RUNNER_TEMP/twm-dr/pgpass"
+          dr() {
+            docker run --rm --network host \
+              -e PGHOST=127.0.0.1 -e PGPORT=5432 \
+              -e PGDATABASE=twm_dr -e PGUSER=twm_dr \
+              -e PGPASSFILE=/out/pgpass \
+              -v "$RUNNER_TEMP/twm-dr:/out" twm-postgres-dr "$@"
+          }
+          dr psql --no-password --dbname twm_dr --set ON_ERROR_STOP=1 \
+            --command "CREATE TABLE alembic_version (version_num text NOT NULL);
+            INSERT INTO alembic_version VALUES ('ci_synthetic_dr');
+            CREATE TABLE pilot_dr_canary (id integer PRIMARY KEY, value text NOT NULL);
+            INSERT INTO pilot_dr_canary VALUES (1, 'restore-verified');"
+          dr python3 /tools/postgres_dr.py backup --out /out/synthetic.dump
+          # All artifacts have owner-only permissions inside the tool image.
+          # Never weaken archive permissions merely to let the runner copy them.
+          dr cp /out/synthetic.dump /out/damaged.dump
+          dr cp /out/synthetic.dump.manifest.json /out/damaged.dump.manifest.json
+          dr sh -c "printf 'corruption' >> /out/damaged.dump"
+          if dr env TWM_RESTORE_ALLOW=1 python3 /tools/postgres_dr.py restore \
+            --file /out/damaged.dump --target-db twm_restore_bad; then
+            echo "Expected checksum rejection" >&2
+            exit 1
+          fi
+          dr env TWM_RESTORE_ALLOW=1 python3 /tools/postgres_dr.py restore \
+            --file /out/synthetic.dump --target-db twm_restore_ci
+          test "$(dr psql --no-password --dbname twm_restore_ci -At \
+            --command "SELECT value FROM pilot_dr_canary WHERE id=1")" = "restore-verified"
+          test "$(dr psql --no-password --dbname twm_restore_ci -At \
+            --command "SELECT version_num FROM alembic_version")" = "ci_synthetic_dr"
+          # Repeat restore into an existing target must be rejected, never overwritten.
+          if dr env TWM_RESTORE_ALLOW=1 python3 /tools/postgres_dr.py restore \
+            --file /out/synthetic.dump --target-db twm_restore_ci; then
+            echo "Expected existing-target rejection" >&2
+            exit 1
+          fi
+          echo "Synthetic PostgreSQL backup/restore drill PASS"
+
+  pilot_smoke:
+    name: Pilot images and synthetic HTTPS smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Create one-run TLS and secret files, build and verify pilot
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          secrets="$RUNNER_TEMP/twm-pilot-ci"
+          mkdir -p "$secrets"
+          printf 'synthetic-ci-strong-db-passphrase\n' > "$secrets/postgres_password"
+          printf 'synthetic-ci-HMAC-secret-0123456789-ABCDEFGHIJKLMNOPQRSTUVWXYZ\n' \
+            > "$secrets/throttle_hmac"
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
+            -keyout "$secrets/key.pem" -out "$secrets/cert.pem" \
+            -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost" \
+            >/dev/null 2>&1
+          # CI disposable secrets only. Production requires controlled host ACLs.
+          chmod 0644 "$secrets/postgres_password" "$secrets/throttle_hmac" \
+            "$secrets/cert.pem" "$secrets/key.pem"
+          cat > "$secrets/pilot.env" <<EOF
+          POSTGRES_DB=twm
+          POSTGRES_USER=twm
+          TWM_PUBLIC_ORIGIN=https://localhost:8443
+          TWM_HTTPS_BIND_ADDRESS=127.0.0.1
+          TWM_HTTPS_PORT=8443
+          TWM_PG_PASSWORD_FILE=$secrets/postgres_password
+          TWM_THROTTLE_SECRET_FILE=$secrets/throttle_hmac
+          TWM_TLS_CERT_FILE=$secrets/cert.pem
+          TWM_TLS_KEY_FILE=$secrets/key.pem
+          EOF
+          args=(--env-file "$secrets/pilot.env" -f deploy/compose.pilot.yml -p twm-pilot-ci)
+          trap 'docker compose "${args[@]}" down -v --remove-orphans || true' EXIT
+          docker compose "${args[@]}" config --quiet
+          docker compose "${args[@]}" up -d --build
+          ready=0
+          for i in {1..40}; do
+            if curl --fail --silent --cacert "$secrets/cert.pem" \
+              https://localhost:8443/api/v1/health/ready | grep -q '"ready"'; then
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ready" != "1" ]; then
+            docker compose "${args[@]}" ps
+            docker compose "${args[@]}" logs --tail=70
+            exit 1
+          fi
+          curl --fail --silent --show-error --cacert "$secrets/cert.pem" \
+            -D "$secrets/headers" -o "$secrets/health.json" \
+            https://localhost:8443/api/v1/health/ready
+          grep -qi '^strict-transport-security:' "$secrets/headers"
+          grep -qi '^cache-control: no-store' "$secrets/headers"
+          grep -q '"database":"ok"' "$secrets/health.json"
+          echo "Isolated pilot image build, real TLS handshake and DB readiness PASS"

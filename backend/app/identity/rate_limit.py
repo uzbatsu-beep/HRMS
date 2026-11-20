@@ -7,7 +7,9 @@ X-Forwarded-For headers as an identity source.
 
 import hashlib
 import hmac
+import ipaddress
 import math
+import socket
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, Request
@@ -30,9 +32,26 @@ def utc(value: datetime) -> datetime:
 
 
 def client_source(request: Request) -> str:
-    # Never directly parse X-Forwarded-For. Proxy trust belongs to deployment/
-    # ASGI server settings; otherwise a caller can rotate headers to bypass limits.
-    return request.client.host if request.client and request.client.host else "unknown"
+    """Trust an overwritten X-Real-IP only from the resolved internal proxy.
+
+    Uvicorn proxy_headers is disabled. No arbitrary X-Forwarded-For parsing:
+    other Docker containers and public callers cannot forge the trusted peer IP.
+    """
+    peer = request.client.host if request.client and request.client.host else "unknown"
+    hostname = settings.trusted_proxy_hostname
+    if hostname:
+        try:
+            trusted_addresses = {
+                str(ipaddress.ip_address(addr[4][0]))
+                for addr in socket.getaddrinfo(hostname, None)
+            }
+            canonical_peer = str(ipaddress.ip_address(peer))
+            if canonical_peer in trusted_addresses:
+                claimed = request.headers.get("x-real-ip", "")
+                return str(ipaddress.ip_address(claimed))
+        except (OSError, ValueError):
+            pass
+    return peer
 
 
 def hashed_bucket(kind: str, value: str) -> str:
