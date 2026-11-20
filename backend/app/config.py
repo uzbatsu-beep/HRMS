@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     cors_allowed_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     auth_throttle_hmac_key: str = "development-only-throttle-key"
     auth_throttle_hmac_key_file: str | None = None
+    trusted_proxy_hostname: str | None = None
 
     @model_validator(mode="after")
     def validate_runtime_security(self) -> "Settings":

@@ -30,6 +30,7 @@ services:
       TWM_DATABASE_PASSWORD_FILE: /run/secrets/database_password
       TWM_AUTH_THROTTLE_HMAC_KEY_FILE: /run/secrets/throttle_hmac
       TWM_CORS_ALLOWED_ORIGINS: ${TWM_PUBLIC_ORIGIN:?Set exact https origin}
+      TWM_TRUSTED_PROXY_HOSTNAME: web
     secrets: [database_password, throttle_hmac]
     command: ["alembic", "upgrade", "head"]
     depends_on:
