@@ -630,3 +630,12 @@ UI «Компетенции» и «Допуски» показывает соо�
 профиля, аппаратные interlocks или юридическое PTW. Существующие полномочия
 Admin/Manager на проверку сохранены. Миграция \`0017_personnel_review_grants\`;
 см. docs/adr/0021-personnel-review-permissions.md.
+
+
+## G6 / PR #36 — приватность данных и пилотная инфраструктура
+
+- [PR #36 — политика и границы защиты ПДн](docs/PR36_SECURITY_PRIVACY.md)
+- [Решения по инфраструктуре пилота](docs/PILOT_INFRASTRUCTURE_DECISIONS.md)
+- [Матрица готовности пилота (NO-GO)](docs/PILOT_READINESS_G6.md)
+
+Кандидат PR #36 ещё не даёт права использовать реальные сведения сотрудников.

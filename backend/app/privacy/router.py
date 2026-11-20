@@ -34,7 +34,7 @@ class PersonalDataReadView(BaseModel):
 def list_read_events(
     enterprise_id: UUID | None = None,
     person_id: UUID | None = None,
-    limit: int = Query(default=100, ge=1, le=100),
+    limit: int = Query(default=100, ge=1, le=100),  # noqa: B008
     _admin: UserAccount = Depends(require_admin),  # noqa: B008
     db: Session = Depends(get_db),  # noqa: B008
 ) -> list[PersonalDataReadEvent]:

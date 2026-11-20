@@ -2,6 +2,7 @@
 
 from collections.abc import Generator
 from datetime import date, timedelta
+from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
@@ -453,3 +454,84 @@ def test_review_and_revocation_reasons_must_not_be_whitespace(
     assert client.get(
         f"/api/v1/credentials/persons/{s['person']}"
     ).json()[0]["status"] == "verified"
+
+
+def test_pr36_private_document_data_requires_exact_unit_read_grant(
+    scenario: tuple[TestClient, Session],
+) -> None:
+    client, db = scenario
+    s = seed(client)
+    record = document(client, s)
+    grant(client, "cred-viewer", s["other_unit"])
+    auth(client, "cred-viewer")
+    denied = client.get(f"/api/v1/credentials/persons/{s['person']}")
+    assert denied.status_code == 404
+
+    grant(client, "cred-viewer", s["unit"])
+    auth(client, "cred-viewer")
+    data = client.get(f"/api/v1/credentials/persons/{s['person']}")
+    assert data.status_code == 200
+    assert data.headers["cache-control"] == "private, no-store"
+    row = data.json()[0]
+    assert row["status"] == "pending"
+    assert row["id"] == record["id"]
+    for field in (
+        "document_reference", "issuer", "review_note", "revoke_reason",
+        "submitted_by", "reviewed_by", "revoked_by",
+    ):
+        assert row[field] is None
+
+    admin = db.scalar(select(UserAccount).where(UserAccount.username == "cred-admin"))
+    viewer = db.scalar(select(UserAccount).where(UserAccount.username == "cred-viewer"))
+    assert admin is not None and viewer is not None
+    granted = client.post(
+        "/api/v1/org/permissions", headers=auth(client),
+        json={
+            "user_id": str(viewer.id), "unit_id": s["unit"],
+            "code": "credentials.record.read_sensitive",
+        },
+    )
+    assert granted.status_code == 201, granted.text
+    auth(client, "cred-viewer")
+    revealed = client.get(f"/api/v1/credentials/persons/{s['person']}")
+    assert revealed.status_code == 200
+    assert revealed.json()[0]["document_reference"] == "CERT-001"
+    assert revealed.json()[0]["issuer"] == "Training centre"
+
+    # Revocation of the granular grant is effective without session restart.
+    revoked = client.delete(
+        f"/api/v1/org/permissions/{granted.json()['id']}", headers=auth(client),
+    )
+    assert revoked.status_code == 204
+    auth(client, "cred-viewer")
+    hidden = client.get(f"/api/v1/credentials/persons/{s['person']}")
+    assert hidden.json()[0]["document_reference"] is None
+
+    from app.privacy.models import PersonalDataReadEvent
+    access = db.scalars(select(PersonalDataReadEvent)).all()
+    assert len(access) == 3
+    assert all(e.surface == "credentials.list" for e in access)
+    assert all(e.actor_user_id == viewer.id for e in access)
+    assert all(e.person_id == UUID(s["person"]) for e in access)
+
+
+def test_pr36_credential_revocation_audit_omits_free_text(
+    scenario: tuple[TestClient, Session],
+) -> None:
+    client, db = scenario
+    s = seed(client)
+    record = document(client, s)
+    review(client, record["id"])
+    secret = "SENSITIVE COMMENT ABOUT EMPLOYEE IN REVOCATION NOTE"
+    revoked = client.post(
+        f"/api/v1/credentials/records/{record['id']}/revoke",
+        headers=auth(client), json={"reason": secret},
+    )
+    assert revoked.status_code == 200
+    row = db.scalars(select(CredentialAuditEvent).where(
+        CredentialAuditEvent.action == "credential.revoked",
+    )).one()
+    assert secret not in row.details_json
+    history = client.get("/api/v1/credentials/audit")
+    assert history.status_code == 200
+    assert secret not in history.text
