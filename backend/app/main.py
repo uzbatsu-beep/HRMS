@@ -23,8 +23,8 @@ app = FastAPI(
     title=settings.app_name,
     version="0.2.0",
     description="API foundation for Technical Workforce Management.",
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url="/docs" if settings.app_env != "production" else None,
+    redoc_url="/redoc" if settings.app_env != "production" else None,
 )
 
 app.add_middleware(
