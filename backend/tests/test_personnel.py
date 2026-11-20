@@ -21,6 +21,7 @@ from app.organization.models import (
     OrganizationUnitType,
     UserUnitScope,
 )
+from app.privacy.models import PersonalDataReadEvent
 from app.personnel.models import (
     EmploymentAssignment,
     Person,
@@ -62,6 +63,7 @@ def personnel_client() -> Generator[tuple[TestClient, Session, dict[str, str]], 
             EmploymentAssignment.__table__,
             TeamMembership.__table__,
             PersonnelAuditEvent.__table__,
+            PersonalDataReadEvent.__table__,
         ],
     )
     db = Session(engine, expire_on_commit=False)

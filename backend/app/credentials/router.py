@@ -23,10 +23,11 @@ from app.database import get_db
 from app.identity.models import UserAccount
 from app.identity.security import get_current_user, require_admin, require_csrf
 from app.organization.access import can_read_enterprise
-from app.organization.permissions import can_review_person
-from app.organization.models import Enterprise
+from app.organization.permissions import can, can_review_person
+from app.organization.models import Enterprise, OrganizationUnit
 from app.personnel.models import Person, WorkforceResource
-from app.personnel.service import require_visible_person
+from app.personnel.service import current_assignment, require_visible_person
+from app.privacy.service import record_personal_data_read
 from app.competence.models import UserPersonLink
 
 router = APIRouter(prefix=f"{settings.api_v1_prefix}/credentials", tags=["credentials"])
@@ -65,6 +66,39 @@ def enterprise_or_404(db: Session, enterprise_id: UUID, user: UserAccount) -> No
     )
     if not can_read_enterprise(db, user, enterprise_id) and linked is None:
         raise HTTPException(status_code=404, detail="Enterprise not found")
+
+
+def may_read_private_document(
+    db: Session, user: UserAccount, person: Person,
+) -> bool:
+    """Explicit, exact-unit read grant; review rights do not imply document disclosure."""
+    if user.role == "admin":
+        return True
+    resource = db.scalar(select(WorkforceResource).where(
+        WorkforceResource.person_id == person.id,
+        WorkforceResource.enterprise_id == person.enterprise_id,
+        WorkforceResource.is_active.is_(True),
+    ))
+    if resource is None:
+        return False
+    assignment = current_assignment(db, resource.id)
+    if assignment is None or assignment.enterprise_id != person.enterprise_id:
+        return False
+    unit = db.get(OrganizationUnit, assignment.unit_id)
+    return bool(unit and can(
+        db, user, unit, "credentials.record.read_sensitive",
+    ))
+
+
+def credential_for_reader(row: PersonCredential, private: bool) -> CredentialView:
+    view = CredentialView.model_validate(row)
+    if private:
+        return view
+    return view.model_copy(update={
+        "document_reference": None, "issuer": None,
+        "review_note": None, "revoke_reason": None,
+        "submitted_by": None, "reviewed_by": None, "revoked_by": None,
+    })
 
 
 @router.get("/enterprises/{enterprise_id}/types", response_model=list[CredentialTypeView])
@@ -166,14 +200,21 @@ def list_person_credentials(
     person_id: UUID,
     user: UserAccount = Depends(get_current_user),  # noqa: B008
     db: Session = Depends(get_db),  # noqa: B008
-) -> list[PersonCredential]:
-    person_or_404(db, person_id, user)
-    return list(db.scalars(
+) -> list[CredentialView]:
+    person = person_or_404(db, person_id, user)
+    rows = list(db.scalars(
         select(PersonCredential)
         .where(PersonCredential.person_id == person_id)
         .order_by(PersonCredential.submitted_at.desc())
         .limit(100)
     ).all())
+    private = may_read_private_document(db, user, person)
+    views = [credential_for_reader(row, private) for row in rows]
+    record_personal_data_read(
+        db, user, person.enterprise_id, "credentials.list", person_id=person.id,
+        count=len(views),
+    )
+    return views
 
 
 @router.post(
@@ -309,7 +350,7 @@ def revoke_record(
     record.revoked_at = datetime.now(timezone.utc)
     record.revoke_reason = payload.reason.strip()
     audit(db, admin, record.enterprise_id, "credential.revoked", record.id, {
-        "person_id": record.person_id, "reason": record.revoke_reason,
+        "person_id": record.person_id, "status": record.status,
     })
     commit_safe(db)
     db.refresh(record)
@@ -331,7 +372,12 @@ def check_eligibility(
     ):
         raise HTTPException(status_code=422, detail="Invalid activity code")
     person = person_or_404(db, person_id, user)
-    return evaluate_activity(db, person, activity_code.lower(), on)
+    result = evaluate_activity(db, person, activity_code.lower(), on)
+    record_personal_data_read(
+        db, user, person.enterprise_id, "credentials.eligibility", person_id=person.id,
+        count=1,
+    )
+    return result
 
 
 @router.get("/audit", response_model=list[AuditView])
@@ -339,10 +385,17 @@ def list_audit(
     enterprise_id: UUID | None = None,
     _admin: UserAccount = Depends(require_admin),  # noqa: B008
     db: Session = Depends(get_db),  # noqa: B008
-) -> list[CredentialAuditEvent]:
+) -> list[AuditView]:
     stmt = select(CredentialAuditEvent).order_by(
         CredentialAuditEvent.created_at.desc()
     )
     if enterprise_id is not None:
         stmt = stmt.where(CredentialAuditEvent.enterprise_id == enterprise_id)
-    return list(db.scalars(stmt.limit(100)).all())
+    rows = db.scalars(stmt.limit(100)).all()
+    # Legacy revocation audit entries could contain free-text reasons.
+    return [
+        AuditView.model_validate(row).model_copy(update={"details_json": "{}"})
+        if row.action == "credential.revoked"
+        else AuditView.model_validate(row)
+        for row in rows
+    ]

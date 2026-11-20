@@ -18,6 +18,7 @@ from app.analytics.router import router as analytics_router
 from app.configuration.router import router as configuration_router
 from app.configuration.workflow_router import router as workflow_router
 from app.equipment.router import router as equipment_router
+from app.privacy.router import router as privacy_router
 
 app = FastAPI(
     title=settings.app_name,
@@ -46,6 +47,20 @@ app.include_router(analytics_router)
 app.include_router(configuration_router)
 app.include_router(workflow_router)
 app.include_router(equipment_router)
+app.include_router(privacy_router)
+
+
+@app.middleware("http")
+async def sensitive_response_no_store(request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith((
+        f"{settings.api_v1_prefix}/personnel/",
+        f"{settings.api_v1_prefix}/credentials/",
+        f"{settings.api_v1_prefix}/competence/",
+        f"{settings.api_v1_prefix}/privacy/",
+    )):
+        response.headers["Cache-Control"] = "private, no-store"
+    return response
 
 
 @app.get("/", tags=["system"], summary="API information")

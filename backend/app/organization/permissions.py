@@ -21,6 +21,7 @@ PERMISSION_CODES = (
     "equipment.policy.review",
     "competence.assessment.review",
     "credentials.record.review",
+    "credentials.record.read_sensitive",
     "work.order.create",
     "work.order.assign",
     "work.crew.manage",
