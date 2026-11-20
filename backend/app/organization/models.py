@@ -126,7 +126,7 @@ class UserUnitPermission(Base):
         CheckConstraint(
             "code IN ('equipment.policy.read', 'equipment.policy.propose', "
             "'equipment.policy.review', 'competence.assessment.review', "
-            "'credentials.record.review', 'work.order.create', 'work.order.assign', "
+            "'credentials.record.review', 'credentials.record.read_sensitive', 'work.order.create', 'work.order.assign', "
             "'work.crew.manage', 'work.order.priority', 'work.order.start', "
             "'work.order.complete', 'work.order.cancel', 'work.order.revalidate', "
             "'work.order.hold', 'work.order.resume')",

@@ -11,6 +11,7 @@ const rights: Record<string, string> = {
   "equipment.policy.review": "Оборудование · Независимое согласование",
   "competence.assessment.review": "Компетенции · Проверка оценки",
   "credentials.record.review": "Допуски · Проверка документа",
+  "credentials.record.read_sensitive": "Допуски · Просмотр реквизитов и замечаний",
   "work.order.create": "Наряд · Создать",
   "work.order.assign": "Наряд · Назначить исполнителя",
   "work.crew.manage": "Наряд · Состав бригады",

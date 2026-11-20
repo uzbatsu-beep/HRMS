@@ -374,6 +374,7 @@ def test_scoped_review_and_access_to_person_credentials(
     )
     assert reviewed.status_code == 200, reviewed.text
     assert reviewed.json()["status"] == "verified"
+    assert reviewed.json()["document_reference"] is None
     assert client.post(
         f"/api/v1/credentials/enterprises/{s['enterprise']}/types",
         headers=csrf,

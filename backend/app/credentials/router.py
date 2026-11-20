@@ -276,7 +276,7 @@ def review_record(
     record_id: UUID, payload: CredentialReview,
     reviewer: UserAccount = Depends(get_current_user),  # noqa: B008
     db: Session = Depends(get_db),  # noqa: B008
-) -> PersonCredential:
+) -> CredentialView:
     record = db.get(PersonCredential, record_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Credential not found")
@@ -325,7 +325,7 @@ def review_record(
     })
     commit_safe(db)
     db.refresh(record)
-    return record
+    return credential_for_reader(record, may_read_private_document(db, reviewer, person))
 
 
 @router.post(
