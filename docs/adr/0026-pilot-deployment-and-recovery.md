@@ -7,7 +7,7 @@ Keep existing `docker-compose.yml` development-only. Provide a separately
 configured production-mode Compose profile with a static-built frontend served
 over TLS, an internal API/database network, separate migration job, non-root
 backend, credentials from file-backed Docker secrets, and strict production
-configuration validation. Backend will not start with example DB password,
+configuration validation. Only the resolved internal `web` peer may supply overwritten `X-Real-IP`; `X-Forwarded-For` is never accepted as client identity. The proxy TLS boundary must be separately verified; an upstream load balancer would require a new trust-chain review. Backend will not start with example DB password,
 development HMAC key, plaintext/wildcard origin or missing secrets.
 
 Use PostgreSQL custom-format logical archives, SHA-256 manifest and
