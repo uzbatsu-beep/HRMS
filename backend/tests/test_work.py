@@ -2617,7 +2617,11 @@ def test_scoped_viewer_can_verify_credential_but_cannot_revoke_or_self_review(
         "note": "Independent review of the issued training permit and validity",
     })
     assert approved.status_code == 200, approved.text
-    assert approved.json()["reviewed_by"] == grant["user_id"]
+    # A review grant does not give read access to private document metadata.
+    assert approved.json()["reviewed_by"] is None
+    assert approved.json()["document_reference"] is None
+    persisted = db.get(PersonCredential, UUID(row["id"]))
+    assert persisted is not None and str(persisted.reviewed_by) == grant["user_id"]
     assert approved.json()["status"] == "verified"
     assert client.post(
         f"/api/v1/credentials/records/{row['id']}/revoke",

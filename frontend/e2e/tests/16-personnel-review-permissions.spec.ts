@@ -87,6 +87,27 @@ test("scoped technical reviewer verifies skills and credentials without admin ri
         .selectOption("credentials.record.review");
       await matrix.getByRole("button", { name: "Выдать полномочие" }).click();
       await expect(matrix).toContainText("Допуски · Проверка документа");
+      // Review authority and private document visibility must be independent.
+      const masked = await reviewerPage.request.get(
+        "/api/v1/credentials/persons/" + person.id,
+      );
+      expect(masked.status()).toBe(200);
+      const maskedRows = await masked.json() as {
+        id: string; document_reference: string | null;
+      }[];
+      expect(maskedRows.find(x => x.id === document.id)?.document_reference).toBeNull();
+      await matrix.getByLabel("Операция")
+        .selectOption("credentials.record.read_sensitive");
+      await matrix.getByRole("button", { name: "Выдать полномочие" }).click();
+      await expect(matrix).toContainText("Допуски · Просмотр реквизитов и замечаний");
+      const visible = await reviewerPage.request.get(
+        "/api/v1/credentials/persons/" + person.id,
+      );
+      const visibleRows = await visible.json() as {
+        id: string; document_reference: string | null;
+      }[];
+      expect(visibleRows.find(x => x.id === document.id)?.document_reference)
+        .toBe("RBAC25-E2E-VERIFY");
 
       expect(await (await reviewerPage.request.get(access)).json()).toEqual({
         competence_review: true, credential_review: true,
