@@ -1,0 +1,94 @@
+# Pilot reference only. TLS certs and secrets are supplied out of band.
+# Never use this stack with real staff before the signed G6 acceptance.
+name: twm-pilot
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-twm}
+      POSTGRES_USER: ${POSTGRES_USER:-twm}
+      POSTGRES_PASSWORD_FILE: /run/secrets/database_password
+    secrets: [database_password]
+    volumes:
+      - pilot_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-twm} -d ${POSTGRES_DB:-twm}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+
+  migrate:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile.pilot
+    environment: &api_env
+      TWM_APP_ENV: production
+      TWM_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-twm}@db:5432/${POSTGRES_DB:-twm}
+      TWM_DATABASE_PASSWORD_FILE: /run/secrets/database_password
+      TWM_AUTH_THROTTLE_HMAC_KEY_FILE: /run/secrets/throttle_hmac
+      TWM_CORS_ALLOWED_ORIGINS: ${TWM_PUBLIC_ORIGIN:?Set exact https origin}
+    secrets: [database_password, throttle_hmac]
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile.pilot
+    environment: *api_env
+    secrets: [database_password, throttle_hmac]
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000",
+              "--no-proxy-headers", "--no-access-log"]
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/ready', timeout=3)"]
+      interval: 10s
+      timeout: 4s
+      retries: 12
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile.pilot
+    ports:
+      - "${TWM_HTTPS_BIND_ADDRESS:-127.0.0.1}:${TWM_HTTPS_PORT:-8443}:8443"
+    secrets: [tls_certificate, tls_private_key]
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+secrets:
+  database_password:
+    file: ${TWM_PG_PASSWORD_FILE:?Absolute path to private DB password file}
+  throttle_hmac:
+    file: ${TWM_THROTTLE_SECRET_FILE:?Absolute path to independent HMAC secret file}
+  tls_certificate:
+    file: ${TWM_TLS_CERT_FILE:?Absolute path to PEM certificate chain}
+  tls_private_key:
+    file: ${TWM_TLS_KEY_FILE:?Absolute path to matching PEM private key}
+
+volumes:
+  pilot_postgres_data:
