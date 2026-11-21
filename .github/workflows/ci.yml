@@ -50,6 +50,8 @@ jobs:
       - name: Ruff lint
         working-directory: backend
         run: ruff check .
+      - name: Validate Markdown internal links
+        run: python scripts/check_docs.py
       - name: Apply database migrations
         working-directory: backend
         run: alembic upgrade head

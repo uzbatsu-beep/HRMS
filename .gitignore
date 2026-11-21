@@ -25,3 +25,19 @@ postgres_data/
 frontend/playwright-report/
 frontend/test-results/
 frontend/e2e/.tmp/
+
+# Private G6 host material, dumps and certificates
+*.dump
+*.dump.manifest.json
+*.backup
+*.bak.sql
+*.pgpass
+.pgpass
+pgpass
+pilot.env
+*.pem
+*.p12
+*.pfx
+*.key
+secrets/
+private/
