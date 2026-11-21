@@ -10,6 +10,8 @@
 4. **[ADR](adr/), [DEVELOPMENT_PLAN](DEVELOPMENT_PLAN.md), [FEATURE_HISTORY](FEATURE_HISTORY.md):** историческая основа. Статусы `Proposed` внутри ADR могут отражать дату написания **до слияния соответствующего PR**.
 5. **Draft PR [#36](https://github.com/uzbatsu-beep/HRMS/pull/36) и [#38](https://github.com/uzbatsu-beep/HRMS/pull/38):** предложенные средства, пока **не входят в `main`**.
 
+[Аудит Git и документации на 2026-11-21](REPOSITORY_AUDIT_2026-11-21.md) — отдельный протокол исходного состояния, найденных проблем, исправлений и оставшихся P0.
+
 ## Операционный справочник
 
 | Задача | Документы | Действующий статус |

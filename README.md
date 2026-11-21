@@ -65,6 +65,7 @@ npm run build
 ## Документация
 
 - **[Единый индекс документации](docs/DOCUMENTATION_INDEX.md)** — содержание, статус и приоритет источников.
+- **[Аудит репозитория 2026-11-21](docs/REPOSITORY_AUDIT_2026-11-21.md)** — подтверждённые факты, исправления, границы CI и открытые риски.
 - [Реализация](docs/IMPLEMENTATION_STATUS.md) · [Матрица требований](docs/REQUIREMENTS_MATRIX.md) · [Дорожная карта v0.3](docs/ROADMAP_V0_3.md) · [План приёмки](docs/ACCEPTANCE_PLAN.md).
 - [G6 readiness](docs/PILOT_READINESS_G6.md) · [Безопасность](docs/SECURITY_HARDENING_PLAN.md) · [Backup/restore](docs/BACKUP_RESTORE_RUNBOOK.md) · [Load plan](docs/LOAD_TEST_PLAN.md).
 - [История развития](docs/FEATURE_HISTORY.md) · [Архитектурные ADR](docs/adr/) · [DEVELOPMENT](docs/DEVELOPMENT.md).
