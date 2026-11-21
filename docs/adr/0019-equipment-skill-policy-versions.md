@@ -1,5 +1,8 @@
 # ADR-0019 — Monotonic equipment skill policy revisions (PR #23)
 
+> **Сверка 2026-11-21:** связанный [PR #23](https://github.com/uzbatsu-beep/HRMS/pull/23) объединён в `main`. Если в тексте осталось `Draft` или `Proposed`, это исторический статус **на момент написания ADR**, не состояние GitHub сегодня. [Текущая матрица](../REQUIREMENTS_MATRIX.md) · [Индекс](../DOCUMENTATION_INDEX.md) · [G6 NO-GO](../PILOT_READINESS_G6.md). Реальные ПДн использовать нельзя.
+
+
 Status: development / synthetic-only. Builds on ADR-0018 / PR #22.
 
 ## Decision

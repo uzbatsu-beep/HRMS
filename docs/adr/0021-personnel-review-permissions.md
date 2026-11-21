@@ -1,5 +1,8 @@
 # ADR-0021 — Independent per-unit competence and credential review (PR #25)
 
+> **Сверка 2026-11-21:** связанный [PR #25](https://github.com/uzbatsu-beep/HRMS/pull/25) объединён в `main`. Если в тексте осталось `Draft` или `Proposed`, это исторический статус **на момент написания ADR**, не состояние GitHub сегодня. [Текущая матрица](../REQUIREMENTS_MATRIX.md) · [Индекс](../DOCUMENTATION_INDEX.md) · [G6 NO-GO](../PILOT_READINESS_G6.md). Реальные ПДн использовать нельзя.
+
+
 Status: Draft; synthetic data only. Extends ADR-0020 / PR #24.
 
 ## Decision and migration
