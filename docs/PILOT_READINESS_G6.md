@@ -1,12 +1,7 @@
 # G6 — план и протокол допуска TWM/HRMS к пилотной эксплуатации
 
-**Актуализация: 2026-11-21.** **NO-GO** для реальных данных сотрудников.
-В `main` объединён PR #33 (синтетическая HTTPS/DR baseline), Ruleset #27708090 Active.
-[Draft PR #36](https://github.com/uzbatsu-beep/HRMS/pull/36) по ПДн и
-[Draft PR #38](https://github.com/uzbatsu-beep/HRMS/pull/38) по локальному ПК прошли
-CI, но **не слиты**. Выбор отдельного Windows/Linux ПК относится **только** к
-первоначальному localhost TEST-ONLY этапу, а не к производственному размещению.
-См. [Issue #37](https://github.com/uzbatsu-beep/HRMS/issues/37).
+**Актуализация: 2026-11-21. NO-GO для реальных данных сотрудников.**
+PR #33 (HTTPS/DR), [#39](https://github.com/uzbatsu-beep/HRMS/pull/39) (документация), [#38](https://github.com/uzbatsu-beep/HRMS/pull/38) (локальный ПК) и [#36](https://github.com/uzbatsu-beep/HRMS/pull/36) (частичный read audit / masking) включены в `main`. Эти изменения **не разрешают** пилот с реальными персональными данными. Выбран отдельный Windows/Linux ПК только для localhost TEST-ONLY; конкретный хост и подтверждение smoke отсутствуют. [Issue #37](https://github.com/uzbatsu-beep/HRMS/issues/37) · [Матрица инфраструктуры](PILOT_INFRASTRUCTURE_DECISIONS.md).
 
 ## Архитектура пилотного контура (проект)
 
@@ -21,19 +16,19 @@ CI, но **не слиты**. Выбор отдельного Windows/Linux ПК
 До запуска с доступом извне: DNS, PKI/корневые сертификаты, правила FW/VLAN,
 финальное размещение, ресурсные лимиты и ответственный за инциденты не утверждены.
 Начальная цель — изолированный localhost на отдельном Windows/Linux ПК;
-см. [PR #38 / runbook](https://github.com/uzbatsu-beep/HRMS/blob/docs/g6-local-test-stand-inf01/docs/LOCAL_TEST_STAND_INF01.md). Не направлять трафик реальных
+см. [LOCAL_TEST_STAND_INF01](LOCAL_TEST_STAND_INF01.md). Не направлять трафик реальных
 сотрудников на этот стек до решения владельца.
 
 ## Матрица G6
 
 | ID | Критерий | Подготовлено в PR | Блокирующее подтверждение |
 |---|---|---|---|
-| OPS-00 | `main` защищён | [Ruleset #27708090](MAIN_PROTECTION.md) active, 5 обязательных checks и заблокированный PR #35 | **Конфигурация и запрет merge при CI FAIL — PASS**; прямой push владельца и post-ruleset positive merge не проверены |
+| OPS-00 | `main` защищён | Ruleset #27708090, 5 required checks, блокировка PR #35 и успешные merges #39/#38 | **CI и запрет merge подтверждены**; прямой push владельца ещё не проверен |
 | OPS-01 | Сегментация и TLS | `deploy/compose.pilot.yml`, Nginx | **Не доказано**: реальные сертификаты, DNS, FW, TLS handshake/pentest |
 | OPS-02 | Production секреты | Проверки `Settings`, Docker secrets | **Не доказано**: vault/ACL, rotate/revoke, секреты и доступ runtime-пользователей |
 | OPS-03 | Production образы | Отдельные Dockerfile без dev servers | **Не доказано**: registry, SBOM, сканирование и immutable image digests |
 | OPS-04 | Backup + restore | `ops/postgres_dr.py`, CI synthetic drill | **Не доказано**: архивы вне площадки, шифрование, расписание, WAL/PITR, реальные RPO/RTO |
-| OPS-05 | ПДн | [Инвентаризация](PRIVACY_IMPACT_CHECKLIST.md), [Draft PR #36](https://github.com/uzbatsu-beep/HRMS/pull/36) с частичным field masking/read audit (CI 5/5) | **Не доказано**: слияние PR, полная инвентаризация API/export, исторические ПДн, legal basis, retention, ИБ-приёмка |
+| OPS-05 | ПДн | [Инвентаризация](PRIVACY_IMPACT_CHECKLIST.md), [PR #36](PR36_SECURITY_PRIVACY.md): частичный field masking/read audit | **Не доказано:** полный inventory API/export, historical raw audit, legal basis, retention и юридическая/ИБ-приёмка |
 | OPS-06 | Файловые вложения | Встроенного произвольного upload сейчас нет | **Не утверждено**: политика хранения доказательств/антивирусной обработки |
 | OPS-07 | Наблюдаемость | Readiness и сквозной load smoke | **Не доказано**: централизованный redacted logging, алерты и инциденты |
 | OPS-08 | Runbooks и восстановление | [Backup runbook](BACKUP_RESTORE_RUNBOOK.md) | **Не доказано**: практический независимый DR drill и тренировка команды |

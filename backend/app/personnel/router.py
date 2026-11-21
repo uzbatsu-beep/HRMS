@@ -16,6 +16,7 @@ from app.organization.access import allowed_unit_ids
 from app.organization.permissions import can_review_person
 from app.competence.models import UserPersonLink
 from app.organization.models import Enterprise, OrganizationUnit
+from app.privacy.service import record_personal_data_read
 from app.personnel.models import (
     EmploymentAssignment,
     Person,
@@ -152,6 +153,7 @@ def list_persons(
             raise HTTPException(status_code=404, detail="Unit not found")
         target_ids = {unit_id} if unit_id is not None else allowed
         if not target_ids:
+            record_personal_data_read(db, user, enterprise_id, "personnel.list", count=0)
             return []
         eligible = (
             select(EmploymentAssignment.id)
@@ -177,7 +179,9 @@ def list_persons(
         query.order_by(Person.last_name, Person.first_name, Person.employee_code)
         .limit(limit).offset(offset)
     ).all()
-    return [profile_view(db, person) for person in rows]
+    profiles = [profile_view(db, person) for person in rows]
+    record_personal_data_read(db, user, enterprise_id, "personnel.list", count=len(profiles))
+    return profiles
 
 
 @router.post(
@@ -222,7 +226,7 @@ def create_person(
         )
     personnel_audit(
         db, admin, person, "person.created",
-        {"employee_code": person.employee_code, "unit_id": payload.unit_id},
+        {"unit_id": payload.unit_id},
     )
     commit_or_conflict(db)
     return profile_detail(db, person, admin)
@@ -263,7 +267,11 @@ def get_person(
     db: Session = Depends(get_db),  # noqa: B008
 ) -> PersonDetail:
     person = require_visible_person(db, user, db.get(Person, person_id))
-    return profile_detail(db, person, user)
+    result = profile_detail(db, person, user)
+    record_personal_data_read(
+        db, user, person.enterprise_id, "personnel.detail", person_id=person.id, count=1,
+    )
+    return result
 
 
 @router.patch(
@@ -287,7 +295,6 @@ def update_person(
         raise HTTPException(status_code=422, detail="No changes provided")
     lock_enterprise(db, person.enterprise_id)
     db.refresh(person)
-    before = {name: getattr(person, name) for name in changed}
     for name in changed:
         value = getattr(payload, name)
         if name in {"first_name", "last_name"}:
@@ -297,8 +304,8 @@ def update_person(
         elif value is not None:
             value = value.strip() or None
         setattr(person, name, value)
-    after = {name: getattr(person, name) for name in changed}
-    personnel_audit(db, admin, person, "person.updated", {"before": before, "after": after})
+    # Audit only allowlisted field names, never previous/new personal values.
+    personnel_audit(db, admin, person, "person.updated", {"changed_fields": sorted(changed)})
     commit_or_conflict(db)
     return profile_detail(db, person, admin)
 
@@ -487,8 +494,15 @@ def list_personnel_audit(
     enterprise_id: UUID | None = None,
     _admin: UserAccount = Depends(require_admin),  # noqa: B008
     db: Session = Depends(get_db),  # noqa: B008
-) -> list[PersonnelAuditEvent]:
+) -> list[PersonnelAuditView]:
     query = select(PersonnelAuditEvent).order_by(PersonnelAuditEvent.created_at.desc())
     if enterprise_id is not None:
         query = query.where(PersonnelAuditEvent.enterprise_id == enterprise_id)
-    return list(db.scalars(query.limit(100)).all())
+    rows = db.scalars(query.limit(100)).all()
+    # Historical events may have stored full name diffs; do not expose those via API.
+    return [
+        PersonnelAuditView.model_validate(row).model_copy(update={"details_json": "{}"})
+        if row.action in {"person.updated", "person.created"}
+        else PersonnelAuditView.model_validate(row)
+        for row in rows
+    ]

@@ -1,6 +1,6 @@
 # Состояние реализации TWM
 
-> **Актуализация 2026-11-21:** `main` `edd25510`; PR #3–#33 объединены; Ruleset #27708090 Active, 5 обязательных CI jobs. PR #36 (privacy) и #38 (Windows/Linux ПК) всё ещё Draft несмотря на зелёный CI. **TEST-ONLY / NO-GO для реальных ПДн.** История PR #3–#11 ниже не является текущим статусом продукта. См. [матрицу требований](REQUIREMENTS_MATRIX.md), [G6](PILOT_READINESS_G6.md) и [индекс](DOCUMENTATION_INDEX.md).
+> **Актуализация 2026-11-21:** `main` включает PR #3–#33 и #39/#38/#36; Ruleset #27708090 Active, пять required CI jobs. **TEST-ONLY / NO-GO для реальных ПДн.** Частичный PII read audit и инструкция ПК реализованы, эксплуатационная приёмка отсутствует. [Матрица](REQUIREMENTS_MATRIX.md) · [G6](PILOT_READINESS_G6.md) · [Индекс](DOCUMENTATION_INDEX.md).
 
 ## Последующие программные этапы
 
@@ -11,7 +11,7 @@
 | PR #26–#29 | GPL/lockfile, план v0.3, throttle/CSRF, UX | Не полнота ИБ/PIA |
 | PR #30–#32 | Work operation grants, PostgreSQL race/pagination, Configurator v2 | Не меняет safety gates |
 | PR #33 | G6 TLS/DR reference, CI smoke | Не готовый пилот на реальных данных |
-| Draft PR #36/#38 | PII read audit и локальный испытательный ПК | **Не слиты** |
+| PR #36/#38 | PII read audit и инструкция отдельного тестового ПК | Слиты в `main`; эксплуатационный G6 NO-GO |
 
 
 

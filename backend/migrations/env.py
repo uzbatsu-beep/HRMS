@@ -15,6 +15,7 @@ import app.availability.models  # noqa: F401 - register scheduling tables.
 import app.work.models  # noqa: F401 - register work management tables.
 import app.configuration.models  # noqa: F401 - register configuration tables.
 import app.equipment.models  # noqa: F401 - register equipment/permit tables.
+import app.privacy.models  # noqa: F401 - register personal-data read audit.
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))

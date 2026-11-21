@@ -18,6 +18,7 @@ from app.organization.permissions import can_review_person
 from app.organization.models import Enterprise
 from app.personnel.models import EmploymentAssignment, Person, WorkforceResource
 from app.personnel.service import require_visible_person
+from app.privacy.service import record_personal_data_read
 from app.competence.models import (
     CompetenceAuditEvent, PersonSkillAssessment, Skill, SkillCategory,
     SkillEvidence, SkillScale, SkillScaleLevel, UserPersonLink,
@@ -463,7 +464,20 @@ def list_assessments(
     rows = db.scalars(
         query.order_by(PersonSkillAssessment.submitted_at.desc()).limit(100)
     ).all()
-    return [assessment_view(db, item) for item in rows]
+    views = [assessment_view(db, item) for item in rows]
+    if (
+        user.role == "viewer"
+        and own_person_id(db, user) != person.id
+        and not can_review_person(db, user, person, "competence.assessment.review")
+    ):
+        # Evidence descriptions/references and review notes are free text, not public matrix data.
+        views = [view.model_copy(update={"evidence": [], "review_note": None})
+                 for view in views]
+    record_personal_data_read(
+        db, user, person.enterprise_id, "competence.assessments", person_id=person.id,
+        count=len(views),
+    )
+    return views
 
 
 @router.post(
@@ -583,6 +597,7 @@ def verified_matrix(
         )
         if len(result) >= 200:
             break
+    record_personal_data_read(db, user, enterprise_id, "competence.matrix", count=len(result))
     return result
 
 

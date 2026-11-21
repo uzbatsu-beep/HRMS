@@ -1,6 +1,6 @@
 # TWM / HRMS — единый индекс документации
 
-**Текущая сверка:** 2026-11-21, `main` `edd25510`. Этот индекс разграничивает текущее состояние кода, предложенные изменения и исторические решения. **Ни один документ не подтверждает готовность к обработке реальных персональных данных сам по себе.**
+**Текущая сверка:** 2026-11-21, `main` после PR #39/#38/#36. Этот индекс разграничивает текущее состояние кода, предложенные изменения и исторические решения. **Ни один документ не подтверждает готовность к обработке реальных персональных данных сам по себе.**
 
 ## Приоритет источников
 
@@ -8,7 +8,7 @@
 2. **[IMPLEMENTATION_STATUS](IMPLEMENTATION_STATUS.md), [REQUIREMENTS_MATRIX](REQUIREMENTS_MATRIX.md), [PILOT_READINESS_G6](PILOT_READINESS_G6.md):** актуальное отражение продукта, задач и эксплуатационных блокировок.
 3. **[ROADMAP_V0_3](ROADMAP_V0_3.md), [Issue #37](https://github.com/uzbatsu-beep/HRMS/issues/37):** план, приоритеты, открытые решения.
 4. **[ADR](adr/), [DEVELOPMENT_PLAN](DEVELOPMENT_PLAN.md), [FEATURE_HISTORY](FEATURE_HISTORY.md):** историческая основа. Статусы `Proposed` внутри ADR могут отражать дату написания **до слияния соответствующего PR**.
-5. **Draft PR [#36](https://github.com/uzbatsu-beep/HRMS/pull/36) и [#38](https://github.com/uzbatsu-beep/HRMS/pull/38):** предложенные средства, пока **не входят в `main`**.
+5. **PR [#36](https://github.com/uzbatsu-beep/HRMS/pull/36) и [#38](https://github.com/uzbatsu-beep/HRMS/pull/38)** вошли в `main`, но не означают разрешение G6/PIA.
 
 [Аудит Git и документации на 2026-11-21](REPOSITORY_AUDIT_2026-11-21.md) — отдельный протокол исходного состояния, найденных проблем, исправлений и оставшихся P0.
 
@@ -17,7 +17,7 @@
 | Задача | Документы | Действующий статус |
 |---|---|---|
 | Общее описание и localhost запуск | [README](../README.md), [DEVELOPMENT](DEVELOPMENT.md) | Разработка, synthetic test |
-| Отдельный Windows/Linux ПК (INF-01) | [Draft #38 / LOCAL_TEST_STAND_INF01](https://github.com/uzbatsu-beep/HRMS/blob/docs/g6-local-test-stand-inf01/docs/LOCAL_TEST_STAND_INF01.md) | Инструкция в Draft; ПК ещё не проверен |
+| Отдельный Windows/Linux ПК (INF-01) | [LOCAL_TEST_STAND_INF01](LOCAL_TEST_STAND_INF01.md) | Инструкция слита, физический ПК и smoke не проверены |
 | Browser E2E и synthetic fixtures | [E2E_ACCEPTANCE](E2E_ACCEPTANCE.md) | Автоматическая приёмка |
 | Текущий набор функций | [IMPLEMENTATION_STATUS](IMPLEMENTATION_STATUS.md), [FEATURE_HISTORY](FEATURE_HISTORY.md) | Не означает pilot GO |
 | Трассировка требований | [REQUIREMENTS_MATRIX](REQUIREMENTS_MATRIX.md) | Текущий реестр |
@@ -26,7 +26,7 @@
 | UX | [UI_UX_ROADMAP](UI_UX_ROADMAP.md) | Изменения + первоначальные предложения |
 | Основная ветка и CI | [MAIN_PROTECTION](MAIN_PROTECTION.md), [CI](../.github/workflows/ci.yml) | Ruleset active; пять обязательных jobs |
 | Security threat model | [SECURITY_HARDENING_PLAN](SECURITY_HARDENING_PLAN.md), [SECURITY](../SECURITY.md) | Внешние P0 остаются |
-| Privacy/персональные данные | [PRIVACY_IMPACT_CHECKLIST](PRIVACY_IMPACT_CHECKLIST.md), [Draft PR #36](https://github.com/uzbatsu-beep/HRMS/pull/36) | Не готово к реальным ПДн |
+| Privacy/персональные данные | [PRIVACY_IMPACT_CHECKLIST](PRIVACY_IMPACT_CHECKLIST.md), [PR36_SECURITY_PRIVACY](PR36_SECURITY_PRIVACY.md) | Только частичные контроли, G6 NO-GO |
 | TLS, секреты и развёртывание | [PILOT_READINESS_G6](PILOT_READINESS_G6.md), [ADR-0026](adr/0026-pilot-deployment-and-recovery.md) | Reference без signoff |
 | Backup/DR | [BACKUP_RESTORE_RUNBOOK](BACKUP_RESTORE_RUNBOOK.md) | CI drill без offsite/PITR |
 | Нагрузочные испытания | [LOAD_TEST_PLAN](LOAD_TEST_PLAN.md) | План; реальные p95 не измерены |

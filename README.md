@@ -2,7 +2,7 @@
 
 Конфигурируемое приложение для управления специалистами технических служб: АСУ ТП, КИПиА, электрика, механика, робототехника, энергетика и метрология. Объединяет оргструктуру, сотрудников, подтверждённые компетенции, допуски, смены, наряды, оборудование и бригады.
 
-**Актуализация: 2026-11-21 · `main`: `edd25510` · [GPL-3.0-only](LICENSE).** Система **не** является SCADA, промышленной системой функциональной безопасности, юридически значимой PTW/LOTO либо системой расчёта зарплаты.
+**Актуализация: 2026-11-21 · `main`: после PR #39/#38/#36 · [GPL-3.0-only](LICENSE).** Система **не** является SCADA, промышленной системой функциональной безопасности, юридически значимой PTW/LOTO либо системой расчёта зарплаты.
 
 ## Режим эксплуатации: TEST-ONLY
 
@@ -24,7 +24,7 @@ docker compose exec backend python -m app.identity.bootstrap_admin
 
 Создайте отдельного тестового администратора. Откройте интерфейс `http://localhost:5173`, readiness `http://localhost:8000/api/v1/health/ready`. Остановка **с сохранением данных**: `docker compose down` (не `down -v`).
 
-Штатный `docker-compose.yml` использует HTTP, Vite dev server, `--reload` и тестовые значения; он **не** предназначен для LAN/production. Нельзя менять его `127.0.0.1` на `0.0.0.0` ради доступа с соседнего ПК. Отдельный `deploy/compose.pilot.yml` содержит reference TLS/secret-baseline, но требует настройки PKI, ACL и внешней приёмки. Подробнее: [DEVELOPMENT](docs/DEVELOPMENT.md) · [тестовый ПК в Draft PR #38](https://github.com/uzbatsu-beep/HRMS/blob/docs/g6-local-test-stand-inf01/docs/LOCAL_TEST_STAND_INF01.md).
+Штатный `docker-compose.yml` использует HTTP, Vite dev server, `--reload` и тестовые значения; он **не** предназначен для LAN/production. Нельзя менять его `127.0.0.1` на `0.0.0.0` ради доступа с соседнего ПК. Отдельный `deploy/compose.pilot.yml` содержит reference TLS/secret-baseline, но требует настройки PKI, ACL и внешней приёмки. Подробнее: [DEVELOPMENT](docs/DEVELOPMENT.md) · [инструкция тестового ПК](docs/LOCAL_TEST_STAND_INF01.md).
 
 ## Технологии
 
@@ -41,9 +41,9 @@ docker compose exec backend python -m app.identity.bootstrap_admin
 
 ## Состояние разработки и G6
 
-- В `main` объединены функции PR #3–#33. Защита `main` [Ruleset #27708090](docs/MAIN_PROTECTION.md) активна и обязательны **5 GitHub Actions checks**.
-- [Draft PR #36](https://github.com/uzbatsu-beep/HRMS/pull/36): полевое маскирование и аудит чтения ПДн; **5/5 CI PASS, НЕ СЛИТ**.
-- [Draft PR #38](https://github.com/uzbatsu-beep/HRMS/pull/38): требования и руководство для отдельного Windows/Linux ПК; **5/5 CI PASS, НЕ СЛИТ**.
+- В `main` объединены PR #3–#33 и дополнительно PR #39, #38 и #36. Защита `main` [Ruleset #27708090](docs/MAIN_PROTECTION.md) активна и обязательны **5 GitHub Actions checks**.
+- [PR #36](https://github.com/uzbatsu-beep/HRMS/pull/36): частичное маскирование ПДн и аудит чтения реализованы; **полная PIA и G6 не утверждены**.
+- [PR #38](https://github.com/uzbatsu-beep/HRMS/pull/38): инструкция отдельного Windows/Linux ПК в `main`; физический хост ещё не принят.
 - [Issue #37](https://github.com/uzbatsu-beep/HRMS/issues/37): инфраструктура, TLS/секреты, RPO/RTO, PIA, нагрузка, UAT остаются открытыми. Выбор локального ПК **не означает** допуск реальных сотрудников.
 - Подтверждённые программные проверки — не альтернатива заводским процедурам безопасности, LOTO/permit и аппаратным interlocks.
 
@@ -67,7 +67,7 @@ npm run build
 - **[Единый индекс документации](docs/DOCUMENTATION_INDEX.md)** — содержание, статус и приоритет источников.
 - **[Аудит репозитория 2026-11-21](docs/REPOSITORY_AUDIT_2026-11-21.md)** — подтверждённые факты, исправления, границы CI и открытые риски.
 - [Реализация](docs/IMPLEMENTATION_STATUS.md) · [Матрица требований](docs/REQUIREMENTS_MATRIX.md) · [Дорожная карта v0.3](docs/ROADMAP_V0_3.md) · [План приёмки](docs/ACCEPTANCE_PLAN.md).
-- [G6 readiness](docs/PILOT_READINESS_G6.md) · [Безопасность](docs/SECURITY_HARDENING_PLAN.md) · [Backup/restore](docs/BACKUP_RESTORE_RUNBOOK.md) · [Load plan](docs/LOAD_TEST_PLAN.md).
+- [G6 readiness](docs/PILOT_READINESS_G6.md) · [PR36 privacy controls](docs/PR36_SECURITY_PRIVACY.md) · [Инфраструктурные решения](docs/PILOT_INFRASTRUCTURE_DECISIONS.md) · [Backup/restore](docs/BACKUP_RESTORE_RUNBOOK.md) · [Load plan](docs/LOAD_TEST_PLAN.md).
 - [История развития](docs/FEATURE_HISTORY.md) · [Архитектурные ADR](docs/adr/) · [DEVELOPMENT](docs/DEVELOPMENT.md).
 - [CONTRIBUTING](CONTRIBUTING.md) · [SECURITY](SECURITY.md) · [AGENTS](AGENTS.md) · [GEMINI](GEMINI.md).
 

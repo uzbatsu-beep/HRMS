@@ -79,8 +79,8 @@ A task is complete only when the user workflow works end-to-end; backend permiss
 
 ## Current repo reality (2026-11-21)
 
-- `main` SHA `edd25510` for this docs baseline; protected by Ruleset #27708090. Any merge requires explicit product owner approval after CI.
-- Draft PR #36: privacy field masking and read audit; Draft PR #38: local Windows/Linux testing. Neither is part of `main`. Five CI jobs green on those PR heads does not make production ready.
+- `main` включает PR #39/#38/#36, защищён Ruleset #27708090; каждое следующее слияние требует разрешения владельца и пяти обязательных CI jobs.
+- PR #36: частичное masking/read audit; PR #38: runbook локального ПК. Оба вошли в `main`, но G6 для реальных данных остаётся NO-GO.
 - INF-01 initial host = separate Windows/Linux PC, **localhost only**, synthetic data. Specific machine, PKI, keys, offsite backup, RPO/RTO, privacy retention, SLO/load and UAT signoff remain missing.
 - `docker-compose.yml` = dev only; `deploy/compose.pilot.yml` = TLS/DR reference pending external validation.
 - Treat old ADR `Proposed` labels as historical; consult `docs/DOCUMENTATION_INDEX.md`, merged PR history and code. Never silently rewrite old decisions.

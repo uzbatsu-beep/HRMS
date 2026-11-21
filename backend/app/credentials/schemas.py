@@ -54,13 +54,13 @@ class CredentialView(BaseModel):
     enterprise_id: UUID
     person_id: UUID
     type_id: UUID
-    document_reference: str
-    issuer: str
+    document_reference: str | None
+    issuer: str | None
     issued_on: date
     valid_from: date
     expires_on: date | None
     status: Literal["pending", "verified", "rejected", "revoked"]
-    submitted_by: UUID
+    submitted_by: UUID | None
     submitted_at: datetime
     reviewed_by: UUID | None
     reviewed_at: datetime | None

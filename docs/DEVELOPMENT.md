@@ -1,6 +1,6 @@
 # Разработка и проверка TWM
 
-> **Актуальность на 2026-11-21:** `main` `edd25510`, только синтетические данные. Документация PR #36/#38 — Draft, не в `main`. Штатный Compose только для localhost; отдельный Windows/Linux тестовый ПК выбран как тип стенда, но ещё не проверен. [Индекс](DOCUMENTATION_INDEX.md) · [G6](PILOT_READINESS_G6.md).
+> **Актуальность на 2026-11-21:** `main` включает PR #39/#38/#36, только синтетические данные; dev Compose только localhost. [Инструкция стенда](LOCAL_TEST_STAND_INF01.md) слита, но реальный Windows/Linux хост ещё не проверен. [Индекс](DOCUMENTATION_INDEX.md) · [G6](PILOT_READINESS_G6.md).
 
 ## Первый запуск
 

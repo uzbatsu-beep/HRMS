@@ -562,3 +562,47 @@ def test_no_one_can_review_assessment_of_linked_self(
         json={"decision": "approved", "note": "Verified evidence independently."},
     )
     assert approved.status_code == 200
+
+
+def test_pr36_viewer_assessment_evidence_hidden_and_reads_audited(
+    context: tuple[TestClient, Session],
+) -> None:
+    client, db = context
+    s = seed(client)
+    user = db.scalar(select(UserAccount).where(UserAccount.username == "skill-viewer"))
+    assert user is not None
+    admin_post(
+        client, "/api/v1/org/scopes",
+        {"user_id": str(user.id), "unit_id": s["unit"], "include_descendants": False},
+    )
+    submitted = client.post(
+        f"/api/v1/competence/persons/{s['person']}/expert-assessments",
+        headers=auth(client, "skill-manager"),
+        json={"skill_id": s["skill"], "level_id": s["level"], "evidence": evidence()},
+    )
+    assert submitted.status_code == 201, submitted.text
+    approved = client.post(
+        f"/api/v1/competence/assessments/{submitted.json()['id']}/review",
+        headers=auth(client, "skill-admin"),
+        json={"decision": "approved", "note": "Verified skill with documented evidence."},
+    )
+    assert approved.status_code == 200, approved.text
+
+    auth(client, "skill-viewer")
+    response = client.get(f"/api/v1/competence/persons/{s['person']}/assessments")
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+    assert response.json()[0]["evidence"] == []
+    assert response.json()[0]["review_note"] is None
+    assert "TEST-OBS-001" not in response.text
+    assert "Verified skill" not in response.text
+
+    auth(client, "skill-manager")
+    manager = client.get(f"/api/v1/competence/persons/{s['person']}/assessments")
+    assert manager.status_code == 200
+    assert manager.json()[0]["evidence"][0]["reference"] == "TEST-OBS-001"
+
+    from app.privacy.models import PersonalDataReadEvent
+    events = db.scalars(select(PersonalDataReadEvent)).all()
+    assert len(events) == 2
+    assert all(e.surface == "competence.assessments" for e in events)

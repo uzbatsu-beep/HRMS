@@ -1,6 +1,6 @@
 # Browser acceptance tests and synthetic demonstration data
 
-> **2026-11-21:** последняя успешная проверка `main` `edd25510` и отдельных Draft PR #36/#38 содержит **31 Playwright Chromium tests** на синтетических данных. Число относится к конкретным commit SHA и Actions run; исходные сценарии PR #13 ниже сохранены для истории. См. [индекс](DOCUMENTATION_INDEX.md).
+> **2026-11-21:** в исходных PR #36/#38 подтверждены 31 Playwright Chromium тест на синтетических данных. Совмещённая ветка PR #36 с документацией #39/#38 проходит отдельный CI; точное число тестов и результат привязывают к конкретному run. [Индекс](DOCUMENTATION_INDEX.md).
 
 ## Goals and scope
 

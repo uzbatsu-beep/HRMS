@@ -13,8 +13,8 @@ type CredentialType = {
 type Requirement = { id: string; activity_code: string; type_id: string };
 type Credential = {
   id: string; person_id: string; type_id: string; status: string;
-  document_reference: string; issuer: string; issued_on: string; valid_from: string;
-  expires_on: string | null; submitted_by: string; reviewed_by: string | null;
+  document_reference: string | null; issuer: string | null; issued_on: string; valid_from: string;
+  expires_on: string | null; submitted_by: string | null; reviewed_by: string | null;
   reviewed_at: string | null; review_note: string | null; revoke_reason: string | null;
 };
 type Eligibility = {
@@ -474,7 +474,11 @@ export default function CredentialsPanel() {
                                 {statusLabel}
                               </span>
                             </div>
-                            <p>№ {record.document_reference} · {record.issuer}</p>
+                            {record.document_reference === null || record.issuer === null ? (
+                              <p>Реквизиты документа скрыты — требуется отдельное право доступа.</p>
+                            ) : (
+                              <p>№ {record.document_reference} · {record.issuer}</p>
+                            )}
                             <p>Выдан: {record.issued_on} · действует: {record.valid_from} —
                               {record.expires_on ?? "без даты окончания"}</p>
                             {record.review_note && <p>Решение: {record.review_note}</p>}

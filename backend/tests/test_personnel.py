@@ -21,6 +21,7 @@ from app.organization.models import (
     OrganizationUnitType,
     UserUnitScope,
 )
+from app.privacy.models import PersonalDataReadEvent
 from app.personnel.models import (
     EmploymentAssignment,
     Person,
@@ -62,6 +63,7 @@ def personnel_client() -> Generator[tuple[TestClient, Session, dict[str, str]], 
             EmploymentAssignment.__table__,
             TeamMembership.__table__,
             PersonnelAuditEvent.__table__,
+            PersonalDataReadEvent.__table__,
         ],
     )
     db = Session(engine, expire_on_commit=False)
@@ -450,3 +452,77 @@ def test_future_assignment_does_not_expose_person_early(
     assert detail.status_code == 200
     assert detail.json()["current_unit_id"] is None
     assert len(detail.json()["assignments"]) == 1
+
+
+def test_pr36_sensitive_read_audit_and_personnel_redaction(
+    personnel_client: tuple[TestClient, Session, dict[str, str]],
+) -> None:
+    client, db, users = personnel_client
+    enterprise, automation, mechanics, _, _ = environment(client)
+    person = create_person(client, enterprise, automation)
+
+    # A foreign-unit viewer receives 404 and must not create a successful-read event.
+    grant(client, users["viewer"], mechanics)
+    login(client, "viewer")
+    forbidden = client.get(f"/api/v1/personnel/persons/{person['id']}")
+    assert forbidden.status_code == 404
+    assert not db.scalars(select(PersonalDataReadEvent)).all()
+
+    grant(client, users["viewer"], automation)
+    login(client, "viewer")
+    detail = client.get(f"/api/v1/personnel/persons/{person['id']}")
+    assert detail.status_code == 200
+    assert detail.headers["cache-control"] == "private, no-store"
+    roster = client.get(f"/api/v1/personnel/enterprises/{enterprise}/persons")
+    assert roster.status_code == 200
+    events = list(db.scalars(select(PersonalDataReadEvent)).all())
+    assert len(events) == 2
+    assert {item.surface for item in events} == {"personnel.detail", "personnel.list"}
+    assert {item.actor_user_id for item in events} == {UUID(users["viewer"])}
+    assert all(item.enterprise_id == UUID(enterprise) for item in events)
+
+    assert client.get("/api/v1/privacy/read-events").status_code == 403
+    admin_csrf = login(client, "admin")
+    accessible = client.get("/api/v1/privacy/read-events", params={"enterprise_id": enterprise})
+    assert accessible.status_code == 200
+    assert len(accessible.json()) == 2
+    assert "first_name" not in accessible.text
+    assert "q" not in accessible.json()[0]  # Do not log names or searches.
+
+    # New mutation audit stores only field names, never PII values or before/after.
+    changed = client.patch(
+        f"/api/v1/personnel/persons/{person['id']}",
+        headers=admin_csrf, json={"last_name": "ОсобенноСекретнаяФамилия"},
+    )
+    assert changed.status_code == 200
+    event = db.scalars(
+        select(PersonnelAuditEvent)
+        .where(PersonnelAuditEvent.action == "person.updated")
+    ).one()
+    assert event.details_json == '{"changed_fields": ["last_name"]}'
+    history = client.get("/api/v1/personnel/audit")
+    assert history.status_code == 200
+    assert "ОсобенноСекретнаяФамилия" not in history.text
+    assert "EMP-101" not in history.text
+
+
+def test_pr36_personal_data_read_audit_fails_closed(
+    personnel_client: tuple[TestClient, Session, dict[str, str]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, db, _ = personnel_client
+    enterprise, automation, _, _, _ = environment(client)
+    person = create_person(client, enterprise, automation)
+    login(client, "admin")
+    from sqlalchemy.exc import OperationalError
+
+    def reject_commit() -> None:
+        raise OperationalError("INSERT", {}, Exception("simulated unavailable audit DB"))
+
+    with monkeypatch.context() as patch:
+        patch.setattr(db, "commit", reject_commit)
+        denied = client.get(f"/api/v1/personnel/persons/{person['id']}")
+    assert denied.status_code == 503
+    assert denied.json()["detail"] == "Read audit unavailable"
+    assert "Анна" not in denied.text
+    assert not db.scalars(select(PersonalDataReadEvent)).all()

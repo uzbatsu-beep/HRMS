@@ -3,7 +3,7 @@
 **Дата актуализации:** 2026-11-19  
 **Базовый код:** `main` @ [`093e4f8`](https://github.com/uzbatsu-beep/HRMS/commit/093e4f8406194e61959acd1d2d69f4e0775c10b5), после объединения PR #26  
 **Статус:** проект плана на согласование владельцем; номера следующих PR — предлагаемые, не открытые задачи  
-**Актуальная сверка 2026-11-21:** исторический baseline и описанные ниже предложения от 2026-11-19 сохранены для трассировки. Фактически G0–G5 (PR #27–#32) и baseline G6 (PR #33) объединены; `main` защищён Ruleset #27708090. [PR #36](https://github.com/uzbatsu-beep/HRMS/pull/36) и [PR #38](https://github.com/uzbatsu-beep/HRMS/pull/38) остаются Draft с успешными CI. [INF-01](https://github.com/uzbatsu-beep/HRMS/issues/37): выбран отдельный Windows/Linux ПК только для TEST-ONLY, конфигурация не проверена. G6 для реальных ПДн по-прежнему **NO-GO**.
+**Актуальная сверка 2026-11-21:** исторический baseline и описанные ниже предложения от 2026-11-19 сохранены для трассировки. Фактически G0–G5 (PR #27–#32) и baseline G6 (PR #33) объединены; `main` защищён Ruleset #27708090. [PR #36](https://github.com/uzbatsu-beep/HRMS/pull/36) и [PR #38](https://github.com/uzbatsu-beep/HRMS/pull/38) объединены после CI вместе с PR #39; реальный G6 остаётся NO-GO. [INF-01](https://github.com/uzbatsu-beep/HRMS/issues/37): выбран отдельный Windows/Linux ПК только для TEST-ONLY, конфигурация не проверена. G6 для реальных ПДн по-прежнему **NO-GO**.
 
 **Область применения:** разработка и приёмка исключительно на синтетических данных. Не вводить реальные записи о работниках или производственные допуски.
 
@@ -102,7 +102,7 @@ TWM (Technical Workforce Management) — конфигурируемая сист
 ## 8. Статус действующей программы G6 (2026-11-21)
 
 - **DONE на уровне репозитория:** PR #33 (тестовая HTTPS/DR reference); правила защиты `main`; синтетический CI из пяти заданий; PR #27–#32 слияния.
-- **REVIEW, не слито:** [PR #36](https://github.com/uzbatsu-beep/HRMS/pull/36) — частичное усиление RBAC/PII; [PR #38](https://github.com/uzbatsu-beep/HRMS/pull/38) — инструкция стенда.
+- **Слито, G6 NO-GO:** [PR #36](https://github.com/uzbatsu-beep/HRMS/pull/36) — частичный RBAC/PII hardening; [PR #38](https://github.com/uzbatsu-beep/HRMS/pull/38) — инструкция ПК. Требуются реальный стенд и оставшиеся INF-02—10.
 - **TEST-ONLY decision:** INF-01 — отдельный Windows/Linux ПК; нет выбранных ОС, ресурсов, DNS, TLS PKI и персонала сопровождения.
 - **OPEN P0:** INF-02–INF-10, юридическая PIA/retention, развертывание и независимый DR drill, нагрузка реальных пользовательских сценариев, подписанный UAT.
 - Каноническая текущая матрица: [PILOT_READINESS_G6](PILOT_READINESS_G6.md) и [Issue #37](https://github.com/uzbatsu-beep/HRMS/issues/37). Цифры старых CI относятся только к старым SHA.

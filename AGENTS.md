@@ -12,7 +12,7 @@
 
 - `main` защищена Ruleset #27708090 и пятью обязательными CI-заданиями (backend, frontend, Chromium E2E, PostgreSQL DR, HTTPS smoke). Не обходить эти проверки.
 - `frontend/package.json` определяет фактический стек React/TypeScript/Vite/Playwright. Tailwind, shadcn/ui, Vitest **не установлены**; не утверждать, что их тесты или стили в проекте есть.
-- PR #36 (Privacy) и PR #38 (локальный ПК) — **Draft**, не входят в `main`. Для тестового ПК допустим только `localhost` dev Compose с синтетическими данными; не открывать dev HTTP наружу.
+- PR #36 (Privacy) и PR #38 (локальный ПК) слиты после CI; первый стенд — только `localhost` Compose с синтетическими данными. Реальный ПК ещё не проверен. Dev HTTP в LAN не открывать.
 - Применять матрицу G6: `TEST-ONLY` ≠ `READY FOR UAT` ≠ `PILOT GO`. Без внешнего security/legal/operations signoff **никаких настоящих кадровых данных**.
 - Актуализировать [G6](docs/PILOT_READINESS_G6.md), [требования](docs/REQUIREMENTS_MATRIX.md) и [индекс](docs/DOCUMENTATION_INDEX.md). Отдельно фиксировать исходный SHA, CI run, ограничения и отсутствие/наличие слияния.
 - **Не объединять PR без явного разрешения владельца.**
