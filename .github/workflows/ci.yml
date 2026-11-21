@@ -52,6 +52,8 @@ jobs:
         run: ruff check .
       - name: Validate Markdown internal links
         run: python scripts/check_docs.py
+      - name: Test Markdown link checker
+        run: python -m unittest discover -s scripts -p 'test_*.py'
       - name: Apply database migrations
         working-directory: backend
         run: alembic upgrade head
