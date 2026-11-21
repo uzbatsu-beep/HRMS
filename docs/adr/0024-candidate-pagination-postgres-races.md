@@ -1,5 +1,8 @@
 # ADR-0024 — Scalable, scope-safe candidate discovery and PostgreSQL assignment races
 
+> **Сверка 2026-11-21:** связанный [PR #31](https://github.com/uzbatsu-beep/HRMS/pull/31) объединён в `main`. Если в тексте осталось `Draft` или `Proposed`, это исторический статус **на момент написания ADR**, не состояние GitHub сегодня. [Текущая матрица](../REQUIREMENTS_MATRIX.md) · [Индекс](../DOCUMENTATION_INDEX.md) · [G6 NO-GO](../PILOT_READINESS_G6.md). Реальные ПДн использовать нельзя.
+
+
 **Status:** PR #31, awaiting review. **Test data:** synthetic only.
 
 ## Problem and decision

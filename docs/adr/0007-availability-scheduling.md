@@ -1,5 +1,8 @@
 # ADR-0007 — Recurring shift calendars and conflict-safe planned reservations
 
+> **Статус на 2026-11-21:** связанный функциональный этап [PR #9](https://github.com/uzbatsu-beep/HRMS/pull/9) объединён в `main`. Оригинальные решения, даты и ограничения ниже сохранены для аудита; актуальное состояние и безопасность определяются [матрицей требований](../REQUIREMENTS_MATRIX.md), [индексом](../DOCUMENTATION_INDEX.md) и [G6](../PILOT_READINESS_G6.md). **Только синтетические данные; не production GO.**
+
+
 **Status:** Accepted for PR #9 (development baseline)  
 **Date:** 2026-11-13  
 **Depends on:** ADR-0003 Organization scopes, ADR-0004 Personnel, ADR-0006 Credentials

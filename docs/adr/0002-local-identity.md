@@ -1,5 +1,8 @@
 # ADR-0002: Local identity, opaque sessions and basic roles
 
+> **Статус на 2026-11-21:** связанный функциональный этап [PR #4](https://github.com/uzbatsu-beep/HRMS/pull/4) объединён в `main`. Оригинальные решения, даты и ограничения ниже сохранены для аудита; актуальное состояние и безопасность определяются [матрицей требований](../REQUIREMENTS_MATRIX.md), [индексом](../DOCUMENTATION_INDEX.md) и [G6](../PILOT_READINESS_G6.md). **Только синтетические данные; не production GO.**
+
+
 - Status: Accepted for Phase 2 identity foundation
 - Date: 2026-11-12
 

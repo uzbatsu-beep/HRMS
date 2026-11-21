@@ -1,5 +1,8 @@
 # ADR-0008 — Work Management with three independent hard staffing gates
 
+> **Статус на 2026-11-21:** связанный функциональный этап [PR #10](https://github.com/uzbatsu-beep/HRMS/pull/10) объединён в `main`. Оригинальные решения, даты и ограничения ниже сохранены для аудита; актуальное состояние и безопасность определяются [матрицей требований](../REQUIREMENTS_MATRIX.md), [индексом](../DOCUMENTATION_INDEX.md) и [G6](../PILOT_READINESS_G6.md). **Только синтетические данные; не production GO.**
+
+
 **Status:** Accepted for PR #10 (first integration slice)  
 **Date:** 2026-11-13  
 **Depends on:** ADR-0003 organization scopes, ADR-0004 personnel,

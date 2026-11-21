@@ -1,5 +1,8 @@
 # ADR-0023 — Exact-unit Work Management operation grants and job-function templates
 
+> **Сверка 2026-11-21:** связанный [PR #30](https://github.com/uzbatsu-beep/HRMS/pull/30) объединён в `main`. Если в тексте осталось `Draft` или `Proposed`, это исторический статус **на момент написания ADR**, не состояние GitHub сегодня. [Текущая матрица](../REQUIREMENTS_MATRIX.md) · [Индекс](../DOCUMENTATION_INDEX.md) · [G6 NO-GO](../PILOT_READINESS_G6.md). Реальные ПДн использовать нельзя.
+
+
 **Status:** Proposed in PR #30; not merged/approved  
 **Date:** 2026-11-19 · **Environment:** synthetic development data only.
 

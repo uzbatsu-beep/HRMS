@@ -1,5 +1,8 @@
 # ADR-0015 — Equipment maintenance windows, software reservation gate
 
+> **Сверка 2026-11-21:** функциональный этап [PR #19](https://github.com/uzbatsu-beep/HRMS/pull/19) объединён в `main`. Пометки `Proposed`/ограничения ниже — исходный исторический текст ADR. Проверять современную реализацию по [требованиям](../REQUIREMENTS_MATRIX.md) и [документному индексу](../DOCUMENTATION_INDEX.md); до завершения [G6](../PILOT_READINESS_G6.md) **только синтетические данные**.
+
+
 Status: PR #19, development/synthetic-only.
 
 ## Scope

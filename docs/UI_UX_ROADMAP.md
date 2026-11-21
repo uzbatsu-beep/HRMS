@@ -1,6 +1,6 @@
 # HRMS UI / UX implementation plan
 
-Date: 2026-11-13. Status: active development guidance.
+Date: 2026-11-13. Historical guidance. **Current check 2026-11-21:** PR #29 merged; the section describing it as `proposed` is an original design record. Current operational status in [IMPLEMENTATION_STATUS](IMPLEMENTATION_STATUS.md) and [DOCUMENTATION_INDEX](DOCUMENTATION_INDEX.md).
 
 ## Motivation
 
@@ -284,3 +284,7 @@ existing domain form. Search remains scoped and limited by existing API contract
 Validation: TypeScript+Vite, Playwright E2E incl. keyboard/mobile/error recovery,
 and the full existing backend suite via CI. This section changes to
 "merged" only after owner review and successful merge.
+
+## Состояние интерфейса на текущем этапе G6
+
+Рабочее окно и E2E-автоматизация включены в `main`; [PR #36](https://github.com/uzbatsu-beep/HRMS/pull/36) предлагает текстовое указание для скрытых реквизитов допусков и новый пункт прав. До объединения это **не свойство рабочего UI main**. [PR #38](https://github.com/uzbatsu-beep/HRMS/pull/38) описывает локальный Windows/Linux ПК, но не изменение UI. Для первоначального испытания запустить `/#dashboard`, проверить три роли, навигацию, экран допусков и масштабирование без реальных ПДн. Тестирование 31 Playwright сценария на CI не заменяет ручную проверку конкретного монитора, шрифтов и разрешения. [G6](PILOT_READINESS_G6.md).

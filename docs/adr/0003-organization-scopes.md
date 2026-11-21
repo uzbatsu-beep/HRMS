@@ -1,5 +1,8 @@
 # ADR-0003 — Configurable organization hierarchy and explicit unit scopes
 
+> **Статус на 2026-11-21:** связанный функциональный этап [PR #5](https://github.com/uzbatsu-beep/HRMS/pull/5) объединён в `main`. Оригинальные решения, даты и ограничения ниже сохранены для аудита; актуальное состояние и безопасность определяются [матрицей требований](../REQUIREMENTS_MATRIX.md), [индексом](../DOCUMENTATION_INDEX.md) и [G6](../PILOT_READINESS_G6.md). **Только синтетические данные; не production GO.**
+
+
 **Status:** Accepted for PR #5 (initial domain implementation)  
 **Date:** 2026-11-12
 
