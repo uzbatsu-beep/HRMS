@@ -3,7 +3,8 @@
 You are the engineering agent for **TWM (Technical Workforce Management)** in this repository.
 
 ## Read before changing code
-- `docs/DEVELOPMENT_PLAN.md` — product scope, architecture baseline, phased roadmap and acceptance gates.
+- `docs/DOCUMENTATION_INDEX.md` — current document inventory and status precedence.
+- `docs/DEVELOPMENT_PLAN.md` — historical product scope and initial architecture. Use roadmap/G6 for current changes.
 - `TWM_Configurable_Prototype_v0.1.html` — preserved UI/interaction reference; not production code.
 - Any ADRs and domain specifications under `docs/`.
 
@@ -29,12 +30,12 @@ organization → person/resource → verified competence → valid credential/pe
 
 ## Baseline stack
 - Frontend: React + TypeScript + Vite.
-- UI: Tailwind CSS and shadcn/ui or a justified equivalent.
+- UI: existing React components and CSS. Tailwind/shadcn are not installed; adding them requires explicit dependency review.
 - Backend: Python + FastAPI + Pydantic.
 - Persistence: PostgreSQL + SQLAlchemy 2.x + Alembic.
 - Local development: Docker Compose.
-- Tests: Pytest/HTTPX, Vitest/Testing Library and Playwright for critical E2E flows.
-- CI: GitHub Actions.
+- Tests: Pytest/HTTPX, TypeScript checks, and Playwright/Chromium E2E. Vitest/Testing Library are not installed.
+- CI: GitHub Actions with five required jobs: backend/migrations, frontend, Chromium E2E, PostgreSQL DR, HTTPS smoke.
 
 Check supported versions and compatibility before pinning dependencies. Avoid new services until a real use case requires them.
 
@@ -75,3 +76,12 @@ Never claim tests passed if they were not run. Never mark a roadmap item done me
 
 ## Definition of Done
 A task is complete only when the user workflow works end-to-end; backend permissions and business constraints are enforced; data persists; migrations work from a clean database; critical rules have tests; edge cases are handled; and documentation reflects the actual implementation.
+
+## Current repo reality (2026-11-21)
+
+- `main` SHA `edd25510` for this docs baseline; protected by Ruleset #27708090. Any merge requires explicit product owner approval after CI.
+- Draft PR #36: privacy field masking and read audit; Draft PR #38: local Windows/Linux testing. Neither is part of `main`. Five CI jobs green on those PR heads does not make production ready.
+- INF-01 initial host = separate Windows/Linux PC, **localhost only**, synthetic data. Specific machine, PKI, keys, offsite backup, RPO/RTO, privacy retention, SLO/load and UAT signoff remain missing.
+- `docker-compose.yml` = dev only; `deploy/compose.pilot.yml` = TLS/DR reference pending external validation.
+- Treat old ADR `Proposed` labels as historical; consult `docs/DOCUMENTATION_INDEX.md`, merged PR history and code. Never silently rewrite old decisions.
+- Report real SHA, Actions run, tests and gaps. Never merge, deploy externally or claim access to real PII without permission and verified G6 controls.
