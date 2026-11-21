@@ -1,5 +1,8 @@
 # ADR-0025 — Configurator v2: governed service-intake forms and approval routes
 
+> **Сверка 2026-11-21:** [PR #32](https://github.com/uzbatsu-beep/HRMS/pull/32) объединён в `main`; исходная пометка `Proposed` оставлена как исторический статус документа. [Текущий статус](../REQUIREMENTS_MATRIX.md) · [G6 NO-GO](../PILOT_READINESS_G6.md) · [Индекс](../DOCUMENTATION_INDEX.md). Код и синтетические CI не заменяют PKI, эксплуатационный DR, PIA или допуск к реальному персоналу.
+
+
 **Date:** 2026-11-19  
 **Status:** Proposed in PR #32, subject to explicit review/approval.  
 **Data:** Isolated synthetic development/CI data only.
