@@ -1,5 +1,20 @@
 # Состояние реализации TWM
 
+> **Актуализация 2026-11-21:** `main` `edd25510`; PR #3–#33 объединены; Ruleset #27708090 Active, 5 обязательных CI jobs. PR #36 (privacy) и #38 (Windows/Linux ПК) всё ещё Draft несмотря на зелёный CI. **TEST-ONLY / NO-GO для реальных ПДн.** История PR #3–#11 ниже не является текущим статусом продукта. См. [матрицу требований](REQUIREMENTS_MATRIX.md), [G6](PILOT_READINESS_G6.md) и [индекс](DOCUMENTATION_INDEX.md).
+
+## Последующие программные этапы
+
+| Этап | Подтверждённый объём в `main` | Ограничение |
+|---|---|---|
+| PR #12–#16 | UI, E2E, общий контекст, аналитика, конфигурация Person | Не production |
+| PR #17–#25 | Оборудование, skills, разрешения, policy review, точные полномочия | Не физический PTW/LOTO |
+| PR #26–#29 | GPL/lockfile, план v0.3, throttle/CSRF, UX | Не полнота ИБ/PIA |
+| PR #30–#32 | Work operation grants, PostgreSQL race/pagination, Configurator v2 | Не меняет safety gates |
+| PR #33 | G6 TLS/DR reference, CI smoke | Не готовый пилот на реальных данных |
+| Draft PR #36/#38 | PII read audit и локальный испытательный ПК | **Не слиты** |
+
+
+
 > План развития после PR #26: [v0.3](ROADMAP_V0_3.md) · [трассируемость требований](REQUIREMENTS_MATRIX.md) · [приёмка](ACCEPTANCE_PLAN.md) · [security gate](SECURITY_HARDENING_PLAN.md). Разделы ниже фиксируют историю слияний, а не готовность к production.
 
 Срез функциональности в `main` на 18 ноября 2026 года, после слияния [PR #25](https://github.com/uzbatsu-beep/HRMS/pull/25). Текущая область применения — разработка и приёмка на синтетических данных.

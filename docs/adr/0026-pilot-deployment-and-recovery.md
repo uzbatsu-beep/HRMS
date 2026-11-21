@@ -1,5 +1,8 @@
 # ADR-0026 — Isolated pilot security baseline and non-destructive DR
 
+> **Сверка 2026-11-21:** [PR #33](https://github.com/uzbatsu-beep/HRMS/pull/33) объединён в `main`; исходная пометка `Proposed` оставлена как исторический статус документа. [Текущий статус](../REQUIREMENTS_MATRIX.md) · [G6 NO-GO](../PILOT_READINESS_G6.md) · [Индекс](../DOCUMENTATION_INDEX.md). Код и синтетические CI не заменяют PKI, эксплуатационный DR, PIA или допуск к реальному персоналу.
+
+
 **Status:** Proposed in G6 PR. **Data:** synthetic until external signoff.
 
 ## Decision

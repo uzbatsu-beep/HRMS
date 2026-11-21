@@ -1,5 +1,8 @@
 # ADR-0004 — Personnel, assignable workforce resources and temporal assignments
 
+> **Статус на 2026-11-21:** связанный функциональный этап [PR #6](https://github.com/uzbatsu-beep/HRMS/pull/6) объединён в `main`. Оригинальные решения, даты и ограничения ниже сохранены для аудита; актуальное состояние и безопасность определяются [матрицей требований](../REQUIREMENTS_MATRIX.md), [индексом](../DOCUMENTATION_INDEX.md) и [G6](../PILOT_READINESS_G6.md). **Только синтетические данные; не production GO.**
+
+
 - **Status:** Accepted for PR #6 implementation
 - **Date:** 2026-11-12
 - **Depends on:** ADR-0001 (modular monolith), ADR-0002 (identity), ADR-0003 (organization scopes)

@@ -1,5 +1,8 @@
 # ADR-0010: Shared workspace context and scoped person navigation
 
+> **Сверка 2026-11-21:** функциональный этап [PR #14](https://github.com/uzbatsu-beep/HRMS/pull/14) объединён в `main`. Пометки `Proposed`/ограничения ниже — исходный исторический текст ADR. Проверять современную реализацию по [требованиям](../REQUIREMENTS_MATRIX.md) и [документному индексу](../DOCUMENTATION_INDEX.md); до завершения [G6](../PILOT_READINESS_G6.md) **только синтетические данные**.
+
+
 Status: Proposed in PR #14 (2026-11-13).
 
 ## Problem

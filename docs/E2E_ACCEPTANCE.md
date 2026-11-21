@@ -1,4 +1,6 @@
-# PR #13 — Browser acceptance tests and synthetic demonstration data
+# Browser acceptance tests and synthetic demonstration data
+
+> **2026-11-21:** последняя успешная проверка `main` `edd25510` и отдельных Draft PR #36/#38 содержит **31 Playwright Chromium tests** на синтетических данных. Число относится к конкретным commit SHA и Actions run; исходные сценарии PR #13 ниже сохранены для истории. См. [индекс](DOCUMENTATION_INDEX.md).
 
 ## Goals and scope
 

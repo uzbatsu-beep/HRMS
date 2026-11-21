@@ -1,5 +1,7 @@
 # Разработка и проверка TWM
 
+> **Актуальность на 2026-11-21:** `main` `edd25510`, только синтетические данные. Документация PR #36/#38 — Draft, не в `main`. Штатный Compose только для localhost; отдельный Windows/Linux тестовый ПК выбран как тип стенда, но ещё не проверен. [Индекс](DOCUMENTATION_INDEX.md) · [G6](PILOT_READINESS_G6.md).
+
 ## Первый запуск
 
 Потребуется Docker с Compose v2. Команды выполняются из корня репозитория и подходят для PowerShell. Локальный стек открывает порты 5173 (интерфейс), 8000 (API) и 5432 (PostgreSQL).
@@ -47,4 +49,10 @@ npm run build
 
 Для новой зависимости запустите `npm install <имя-пакета>` в каталоге `frontend/` и включите обновлённый lock-файл в тот же PR. После изменения зависимостей в уже созданном Compose-стенде обновите именованный том модулей командой `docker compose exec frontend npm ci` из корня и перезапустите сервис через `docker compose restart frontend`.
 
-Браузерная приёмка использует отдельный стек PostgreSQL, вымышленных пользователей и порты 5174/8001. Полная последовательность для Windows, переменные запуска и расположение отчёта приведены в [E2E_ACCEPTANCE.md](E2E_ACCEPTANCE.md). В CI миграции и E2E используют PostgreSQL 16. Многие модульные сценарии pytest используют SQLite в памяти. Команды трёх заданий CI можно сверить в [ci.yml](../.github/workflows/ci.yml).
+Браузерная приёмка использует отдельный стек PostgreSQL, вымышленных пользователей и порты 5174/8001. Полная последовательность для Windows, переменные запуска и расположение отчёта приведены в [E2E_ACCEPTANCE.md](E2E_ACCEPTANCE.md). В CI миграции и E2E используют PostgreSQL 16. Многие модульные сценарии pytest используют SQLite в памяти. Команды пяти обязательных заданий CI можно сверить в [ci.yml](../.github/workflows/ci.yml).
+
+## Проверки INF-01 и полный CI
+
+На выбранном Windows/Linux ПК проверить версии ОС, CPU/RAM/SSD, `docker version`, `docker compose version`, Linux containers, а также доступ к портам `5173/8000/5432` только по `127.0.0.1`. В Windows необходимы WSL2/виртуализация и проверка лицензии Docker Desktop. Ни один dev HTTP порт не открывать для корпоративной LAN.
+
+GitHub Actions содержит **пять** требуемых jobs: backend/Ruff/PG16 Alembic/pytest; frontend TS/Vite; Playwright Chromium; backup/isolated PostgreSQL restore; pilot images/HTTPS smoke. Они синхронизированы с [Ruleset](MAIN_PROTECTION.md). Сохраняйте commit SHA и URL соответствующего run; успешный CI не подтверждает PROD/TLS PKI, ПДн, DR RPO/RTO и нагрузочный SLO. Для восстановления не использовать `docker compose down -v`.

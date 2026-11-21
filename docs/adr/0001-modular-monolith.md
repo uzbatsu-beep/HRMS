@@ -1,6 +1,9 @@
 
 # ADR-0001: Modular monolith as the initial application architecture
 
+> **Статус на 2026-11-21:** связанный функциональный этап [PR #3](https://github.com/uzbatsu-beep/HRMS/pull/3) объединён в `main`. Оригинальные решения, даты и ограничения ниже сохранены для аудита; актуальное состояние и безопасность определяются [матрицей требований](../REQUIREMENTS_MATRIX.md), [индексом](../DOCUMENTATION_INDEX.md) и [G6](../PILOT_READINESS_G6.md). **Только синтетические данные; не production GO.**
+
+
 - Status: Accepted for the foundation stage
 - Date: 2026-11-12
 

@@ -1,6 +1,6 @@
 # TWM — матрица требований и трассируемости
 
-**Baseline:** `main` @ `093e4f8`, 2026-11-19. **Область:** синтетические данные.  
+**Актуализация:** `main` @ `edd25510` (2026-11-21). Историческая базовая матрица от 2026-11-19 пересмотрена по фактически слитым PR #27–#33. **Область:** только синтетические данные.  
 **Статусы:** **I** — реализовано в main и есть соответствующий код/тесты; **P** — частично, необходима доработка; **N** — не реализовано / не подтверждено. Статус I не означает готовности к production.  
 **Приоритеты:** P0 — блокирует безопасную эксплуатацию или базовый сценарий; P1 — важно для пилотного рабочего процесса; P2 — последующее развитие.
 
@@ -20,23 +20,26 @@
 | FR-12 | Delegated exact-unit read/propose/review политики и review персонала | I | P1 | [Permissions](../backend/app/organization/permissions.py), [ADR-0021](adr/0021-personnel-review-permissions.md) |
 | FR-13 | Dashboard 30 дней с RBAC и документированными метриками | I | P1 | [Analytics](../backend/app/analytics/router.py), [ADR-0011](adr/0011-operational-analytics.md) |
 | FR-14 | Дополнительные поля Person: validation → independent approval → publish | I | P1 | [Configuration](../backend/app/configuration/), [test_configuration](../backend/tests/test_configuration.py) |
-| FR-15 | Configurator v2: ограниченные формы, состояния и независимые маршруты заявок технической службы | PR #32 (Draft) | P1 | [ADR-0025](adr/0025-configurator-v2-service-intake.md), [Workflow API](../backend/app/configuration/workflow_router.py), [tests](../backend/tests/test_configuration.py) |
-| FR-15 | Рабочий трёхколоночный интерфейс, единый контекст и поиск | I | P1 | [App](../frontend/src/App.tsx), [E2E context](../frontend/e2e/tests/05-workspace-context.spec.ts) |
-| FR-16 | Полный, постраничный и детерминированный поиск исполнителей | P | P1 | Сейчас первый 100; G4 / PR #31 |
-| FR-17 | Версионируемые маршруты, статусы и формы Configurator v2 | N | P1 | G5 / PR #32 |
-| FR-18 | Шаблоны ролей, операции Work Management в fine-grained RBAC | P | P1 | Сейчас только 5 operation grants; G3 / PR #30 |
+| FR-15 | Configurator v2: типизированные формы и управляемые состояния информационных сервисных заявок | I | P1 | [ADR-0025](adr/0025-configurator-v2-service-intake.md), [Workflow API](../backend/app/configuration/workflow_router.py), [tests](../backend/tests/test_configuration.py) |
+| FR-16 | Полный, постраничный и детерминированный поиск исполнителей | I | P1 | [ADR-0024](adr/0024-candidate-pagination-postgres-races.md), PR #31 merged, PostgreSQL race CI |
+| FR-17 | Независимое утверждение и публикация версий Configurator v2, pinned instance workflows и аудит | I | P1 | [ADR-0025](adr/0025-configurator-v2-service-intake.md), PR #32 merged, ограниченный non-safety scope |
+| FR-18 | Шаблоны ролей, операции Work Management в fine-grained RBAC | I | P1 | [ADR-0023](adr/0023-work-operations-role-templates.md), PR #30 merged (exact-unit grants, не полный глобальный RBAC) |
 | FR-19 | Импорт/экспорт, интеграция ERP/CMMS/EAM | N | P2 | G7, контракт и синхронизация |
 | FR-20 | Настоящее хранилище доказательств и защищённая выдача файлов | N | P0 до пилота при требовании файлов | Метаданные есть, файловое хранилище не подтверждено; G6 |
+| FR-21 | Рабочий трёхколоночный интерфейс, единый контекст и поиск | I | P1 | [App](../frontend/src/App.tsx), [E2E context](../frontend/e2e/tests/05-workspace-context.spec.ts) |
 | NFR-01 | Argon2id, отзывные cookie-сессии, CSRF | I | P0 | [Identity](../backend/app/identity/security.py), [auth test](../backend/tests/test_identity_auth.py) |
-| NFR-02 | Rate limit/lockout и противодействие credential stuffing | N | P0 | [login](../backend/app/identity/router.py); G1 / PR #28 |
-| NFR-03 | Protected `main`, PR-only merge, обязательные CI checks | N | P0 | Проверено 2026-11-19: main protected=false, rulesets=[]; TD-01 |
-| NFR-04 | CI: lint, backend tests/migrations, TS/build, Playwright | I | P0 | [Workflow](../.github/workflows/ci.yml), [CI 44280041886](https://github.com/uzbatsu-beep/HRMS/actions/runs/44280041886) |
+| NFR-02 | Ограничение попыток входа и снижение риска credential stuffing (не полноценная account-lockout/MFA система) | I | P0 | [login](../backend/app/identity/router.py), [ADR-0022](adr/0022-login-throttling-csrf.md), PR #28 merged; не замена MFA/SSO |
+| NFR-03 | Protected `main`, PR-only merge, обязательные CI checks | I | P0 | [Ruleset #27708090](MAIN_PROTECTION.md) active, PR #35 blocked on failed CI; прямой push не проверен |
+| NFR-04 | CI: пять обязательных jobs (backend, frontend, Playwright, PostgreSQL DR, HTTPS smoke) | I | P0 | [Workflow](../.github/workflows/ci.yml), [main CI](https://github.com/uzbatsu-beep/HRMS/actions/runs/44676505208) |
 | NFR-05 | TLS/secrets/SSO/защита PII в production | P | P0 | Есть dev baseline, отсутствует подтверждённый production-контур; G1/G6 |
-| NFR-06 | Восстановление БД (backup/restore), RPO/RTO, retention | N | P0 до пилота | G6, операционный протокол |
-| NFR-07 | PostgreSQL race/нагрузочные испытания на нескольких сессиях | P | P1 | Транзакционные проверки в коде; G4 |
+| NFR-06 | Восстановление БД (backup/restore), RPO/RTO, retention | P | P0 до пилота | [Runbook](BACKUP_RESTORE_RUNBOOK.md), синтетический CI restore в PR #33; нет доказанных offsite/PITR/RPO/RTO |
+| NFR-07 | PostgreSQL race/нагрузочные испытания на нескольких сессиях | P | P1 | Гонки на PostgreSQL подтверждены PR #31; реальная нагрузка и SLO остаются open [INF-07](https://github.com/uzbatsu-beep/HRMS/issues/37) |
 | NFR-08 | Воспроизводимый frontend install с lockfile | I | P1 | [package-lock](../frontend/package-lock.json), [CI](../.github/workflows/ci.yml) |
 | NFR-09 | Аудит критичных изменений и redacted equipment explorer | I | P1 | [audit explorer](../backend/app/equipment/audit_explorer.py), [ADR-0017](adr/0017-equipment-audit-explorer.md) |
 | NFR-10 | Автоматическая реакция на изменения допусков в фоне | P | P0 до использования как эксплуатационный сигнал | Явная revalidation есть; фоновые rechecks/сертифицированные функции нет |
+
+| NFR-11 | Полевое маскирование и аудит чтения ПДн | N | P0 до реальных ПДн | [Draft PR #36](https://github.com/uzbatsu-beep/HRMS/pull/36) 5/5 CI, **не в main**, полная PIA не утверждена |
+| NFR-12 | Выделенный локальный Windows/Linux тестовый ПК | N | P1 для локального TEST-ONLY | [Draft PR #38](https://github.com/uzbatsu-beep/HRMS/pull/38), [INF-01](https://github.com/uzbatsu-beep/HRMS/issues/37); пока нет подтверждённого хоста и запуска |
 
 ## Правила обновления
 
