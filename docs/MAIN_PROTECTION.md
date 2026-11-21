@@ -1,39 +1,37 @@
-# GitHub: обязательная защита основной ветки перед пилотом
+# GitHub — защита основной ветки `main`
 
-**Факт на 2026-11-20:** `main.protected=false`, rulesets пусты;
-проверка branch-protection API через интеграцию возвращает HTTP 403.
-Ни создание документа, ни успешный CI **не включают** защиту ветки.
+**Текущее состояние (проверено по GitHub API, 2026-11-21):** защищённая ветка `main`, active [Ruleset #27708090](https://github.com/uzbatsu-beep/HRMS/rules/27708090) — `HRMS — main branch protection`. Значение `main.protected=true`. Это **действующая настройка**, а не предложение.
 
-## Действия владельца/администратора репозитория
+## Подтверждённые правила
 
-1. Перейти в [Repository Settings → Rules → Rulesets](https://github.com/uzbatsu-beep/HRMS/settings/rules).
-2. Создать **New branch ruleset**, статус **Active**, target branch `main`
-   (не только default-branch pattern, если он не совпадает).
-3. Включить **Require a pull request before merging**, как минимум одно
-   одобрение независимым reviewer (если это технически возможно в команде),
-   **Dismiss stale approvals** и **Require conversation resolution**.
-   Если владелец работает один, отдельный reviewer/временный процесс
-   утверждения нужно определить до активации обязательных approvals:
-   не создавать тупиковую политику, которую затем обходят администраторы.
-4. Включить **Require status checks to pass**. Выбрать точные job names:
-   - `Backend - lint, migration and tests`
-   - `Frontend - typecheck and build`
-   - `Browser E2E - Chromium and synthetic data`
-   - `PostgreSQL backup and isolated restore drill` (появится после PR G6)
-5. Заблокировать **force push**, удаление `main` и прямые push.
-   Не создавать постоянные широкие bypass-исключения.
-6. Включить required code review и блокировать merge при падающих проверках;
-   при необходимости обсудить linear history / signed commits отдельно,
-   исходя из реального workflow и доступа разработчиков.
+- Изменения `main` через Pull Request, обязательное разрешение дискуссий.
+- Запрещены удаление и `force-push`; permanent bypass actors отсутствуют.
+- Обязательные пять GitHub Actions jobs, их **точные имена**:
+  1. `Backend - lint, migration and tests`
+  2. `Frontend - typecheck and build`
+  3. `Browser E2E - Chromium and synthetic data`
+  4. `PostgreSQL backup and isolated restore drill`
+  5. `Pilot images and synthetic HTTPS smoke`
+- Требуется актуальность ветки относительно `main` перед слиянием.
+- Число обязательных approvals — **0** для работы одного владельца. При появлении независимых reviewers можно утвердить отдельную политику, не создавая тупиковую блокировку собственных PR.
 
-## Проверка фактического применения
+## Протокол отрицательной проверки — подтверждено частично
 
-- Попытка **обычного прямого push** в `main` должна быть отклонена. Делать
-  только тестовое изменение без секретов, не подвергая риску рабочие файлы.
-- Тестовый PR с намеренно неуспешным job должен блокировать merge.
-- Убедиться, что зелёный PR с нужным review можно объединить через UI.
-- Повторно проверить API: `protected=true`, `rulesets` содержит Active.
-- Сохранить ссылку на ruleset и скриншот настройки в протоколе G6.
+| Проверка | Evidence | Статус |
+|---|---|---|
+| `protected=true` / Active Ruleset | GitHub API, Ruleset #27708090 | PASS |
+| Намеренно падающий обязательный CI блокирует merge | [Тестовый PR #35](https://github.com/uzbatsu-beep/HRMS/pull/35), [Actions run #44696619934](https://github.com/uzbatsu-beep/HRMS/actions/runs/44696619934): Ruff FAIL, `mergeable_state=blocked`; PR закрыт без слияния | PASS |
+| Основная ветка не получила тестовую синтаксическую ошибку | PR #35 закрыт, `main` не изменился | PASS |
+| Реальный отказ прямого `git push` от владельца | Вывод терминала или отдельный audit log **не предоставлен** | NOT VERIFIED |
+| Тестовый PR с зелёным CI может быть слит | Предыдущий успешный PR #33 был слит **до** включения Ruleset; новый отдельный проверочный опыт не проводился | NOT VERIFIED |
 
-Задача **открыта**, пока эти действия не выполнены и не подтверждены;
-текущий GitHub connector не предоставляет право изменять правила репозитория.
+[Issue #34](https://github.com/uzbatsu-beep/HRMS/issues/34) закрыт владельцем. Статус Issue **не подменяет** две отсутствующие проверки. Не выполнять неконтролируемые попытки перезаписи `main` только ради подтверждения защиты.
+
+## Поддержка и изменения Ruleset
+
+- Владельцу репозитория: [Settings → Rules → Rulesets](https://github.com/uzbatsu-beep/HRMS/settings/rules). Импорт JSON может создать правило, но фактическое действие проверяется GitHub API и отрицательными тестами.
+- При переименовании CI job синхронизировать Ruleset и [ci.yml](../.github/workflows/ci.yml), иначе новый job не заменит обязательный старый контекст автоматически.
+- Не включать bypass для быстрого слияния; согласовывать отдельное исключение только при реальном инциденте с документированной процедурой и audit evidence.
+- Новые PR требуют решения владельца на слияние; проход CI не означает право применять изменения в production.
+
+См. [G6 readiness](PILOT_READINESS_G6.md), [документацию](DOCUMENTATION_INDEX.md) и [политику безопасности](../SECURITY.md).
