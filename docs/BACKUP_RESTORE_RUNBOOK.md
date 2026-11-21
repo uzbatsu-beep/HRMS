@@ -94,3 +94,9 @@ python3 ops/postgres_dr.py restore \
 тест восстановления **полного** синтетического набора через API и
 подписанный результат по RPO/RTO. Текущий smoke-test CI проверяет
 основной механизм, но **не доказывает** выполнение этих условий.
+
+## 5. Windows/Linux localhost и безопасные операции
+
+На этапе INF-01 использовать только синтетические сведения. Docker named volume сам по себе **не** является резервной копией. Копию нужно хранить отдельно от рабочего тома, проверять пару dump + SHA-256 manifest и восстановление в **новую** тестовую БД. Команды `umask`, `export` и `chmod` в этом руководстве ориентированы на Linux shell/контейнер: в Windows PowerShell требуются WSL2 или Linux контейнер и отдельная проверка NTFS/WSL2 файловых ACL, особенно для `PGPASSFILE`.
+
+Это ещё не offsite/immutable encrypted backup. Сроки хранения, WAL/PITR, roles/grants и измеренные RPO/RTO остаются **NO-GO** до подписанных испытаний. См. [Issue #37](https://github.com/uzbatsu-beep/HRMS/issues/37) и [G6](PILOT_READINESS_G6.md).

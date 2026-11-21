@@ -1,4 +1,6 @@
-# PR #13 — Browser acceptance tests and synthetic demonstration data
+# Browser acceptance tests and synthetic demonstration data
+
+> **2026-11-21:** в исходных PR #36/#38 подтверждены 31 Playwright Chromium тест на синтетических данных. Совмещённая ветка PR #36 с документацией #39/#38 проходит отдельный CI; точное число тестов и результат привязывают к конкретному run. [Индекс](DOCUMENTATION_INDEX.md).
 
 ## Goals and scope
 

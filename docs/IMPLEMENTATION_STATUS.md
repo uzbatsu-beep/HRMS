@@ -1,5 +1,20 @@
 # Состояние реализации TWM
 
+> **Актуализация 2026-11-21:** `main` включает PR #3–#33 и #39/#38/#36; Ruleset #27708090 Active, пять required CI jobs. **TEST-ONLY / NO-GO для реальных ПДн.** Частичный PII read audit и инструкция ПК реализованы, эксплуатационная приёмка отсутствует. [Матрица](REQUIREMENTS_MATRIX.md) · [G6](PILOT_READINESS_G6.md) · [Индекс](DOCUMENTATION_INDEX.md).
+
+## Последующие программные этапы
+
+| Этап | Подтверждённый объём в `main` | Ограничение |
+|---|---|---|
+| PR #12–#16 | UI, E2E, общий контекст, аналитика, конфигурация Person | Не production |
+| PR #17–#25 | Оборудование, skills, разрешения, policy review, точные полномочия | Не физический PTW/LOTO |
+| PR #26–#29 | GPL/lockfile, план v0.3, throttle/CSRF, UX | Не полнота ИБ/PIA |
+| PR #30–#32 | Work operation grants, PostgreSQL race/pagination, Configurator v2 | Не меняет safety gates |
+| PR #33 | G6 TLS/DR reference, CI smoke | Не готовый пилот на реальных данных |
+| PR #36/#38 | PII read audit и инструкция отдельного тестового ПК | Слиты в `main`; эксплуатационный G6 NO-GO |
+
+
+
 > План развития после PR #26: [v0.3](ROADMAP_V0_3.md) · [трассируемость требований](REQUIREMENTS_MATRIX.md) · [приёмка](ACCEPTANCE_PLAN.md) · [security gate](SECURITY_HARDENING_PLAN.md). Разделы ниже фиксируют историю слияний, а не готовность к production.
 
 Срез функциональности в `main` на 18 ноября 2026 года, после слияния [PR #25](https://github.com/uzbatsu-beep/HRMS/pull/25). Текущая область применения — разработка и приёмка на синтетических данных.

@@ -17,7 +17,7 @@
 
 | Код | Решение/параметр | Значение | Ответственный / evidence |
 |---|---|---|---|
-| INF-01 | Хостинг, сеть, VLAN/VPC, CPU/RAM/disk, схема хранения | TBD | Инфраструктура/эксплуатация |
+| INF-01 | Отдельный TEST-ONLY ПК Stage A; последующее hosting/VLAN/CPU/RAM/storage | Stage A: выбран тип Windows/Linux ПК на localhost, конкретный host/acceptance — TBD; production: TBD | Эксплуатация / [Issue #37](https://github.com/uzbatsu-beep/HRMS/issues/37) |
 | INF-02 | DNS/FQDN, корпоративная PKI, TLS policy, доверенный proxy | TBD | ИБ/сетевые администраторы |
 | INF-03 | Secret manager, ACL непривилегированных контейнеров, rotate/revoke | TBD | ИБ/эксплуатация |
 | INF-04 | Image registry, SBOM, CVE scanning, immutable digest pin | TBD | DevOps/ИБ |

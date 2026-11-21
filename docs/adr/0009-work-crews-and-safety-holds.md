@@ -1,5 +1,8 @@
 # ADR-0009 — Multi-person crew, audited lead substitution and explicit safety holds
 
+> **Сверка 2026-11-21:** функциональный этап [PR #11](https://github.com/uzbatsu-beep/HRMS/pull/11) объединён в `main`. Пометки `Proposed`/ограничения ниже — исходный исторический текст ADR. Проверять современную реализацию по [требованиям](../REQUIREMENTS_MATRIX.md) и [документному индексу](../DOCUMENTATION_INDEX.md); до завершения [G6](../PILOT_READINESS_G6.md) **только синтетические данные**.
+
+
 **Status:** Accepted for PR #11 development implementation  
 **Date:** 2026-11-13  
 **Depends on:** ADR-0008 Work Management and prior domain checks.

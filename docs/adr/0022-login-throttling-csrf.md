@@ -1,5 +1,8 @@
 # ADR-0022 — Persisted login failure limits and mutation origin checks
 
+> **Сверка 2026-11-21:** связанный [PR #28](https://github.com/uzbatsu-beep/HRMS/pull/28) объединён в `main`. Если в тексте осталось `Draft` или `Proposed`, это исторический статус **на момент написания ADR**, не состояние GitHub сегодня. [Текущая матрица](../REQUIREMENTS_MATRIX.md) · [Индекс](../DOCUMENTATION_INDEX.md) · [G6 NO-GO](../PILOT_READINESS_G6.md). Реальные ПДн использовать нельзя.
+
+
 - **Status:** proposed for PR #28 (not automatically approved or merged)
 - **Date:** 2026-11-19
 - **Baseline:** main after PR #27 (`5697519`)

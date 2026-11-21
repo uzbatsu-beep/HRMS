@@ -1,5 +1,8 @@
 # ADR-0005 — Versioned competence catalog and evidence-backed review
 
+> **Статус на 2026-11-21:** связанный функциональный этап [PR #7](https://github.com/uzbatsu-beep/HRMS/pull/7) объединён в `main`. Оригинальные решения, даты и ограничения ниже сохранены для аудита; актуальное состояние и безопасность определяются [матрицей требований](../REQUIREMENTS_MATRIX.md), [индексом](../DOCUMENTATION_INDEX.md) и [G6](../PILOT_READINESS_G6.md). **Только синтетические данные; не production GO.**
+
+
 **Status:** Accepted for PR #7 (development stage)  
 **Date:** 2026-11-12  
 **Depends on:** ADR-0002 Identity, ADR-0003 Organization Scope, ADR-0004 Personnel

@@ -1,5 +1,8 @@
 # ADR-0006 — Credential records, independent verification and deny-by-default work gates
 
+> **Статус на 2026-11-21:** связанный функциональный этап [PR #8](https://github.com/uzbatsu-beep/HRMS/pull/8) объединён в `main`. Оригинальные решения, даты и ограничения ниже сохранены для аудита; актуальное состояние и безопасность определяются [матрицей требований](../REQUIREMENTS_MATRIX.md), [индексом](../DOCUMENTATION_INDEX.md) и [G6](../PILOT_READINESS_G6.md). **Только синтетические данные; не production GO.**
+
+
 **Status:** Accepted for PR #8, development implementation  
 **Date:** 2026-11-13  
 **Depends on:** ADR-0002 Identity, ADR-0003 Organization, ADR-0004 Personnel,
